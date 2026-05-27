@@ -7,7 +7,7 @@ from clip_pocket.history import ClipboardHistory, HistoryChange, fingerprint
 
 def make_history(
     retention_seconds: int | None = 60,
-    min_text_length: int = 2,
+    min_text_length: int = 1,
     max_items: int = 100,
     max_text_length: int = 100_000,
     max_total_text_length: int = 5_000_000,
@@ -22,12 +22,20 @@ def make_history(
 
 
 class ClipboardHistoryTest(unittest.TestCase):
-    def test_ignores_empty_and_one_character_text(self) -> None:
+    def test_ignores_empty_text(self) -> None:
         history = make_history()
 
         self.assertIs(history.add_or_refresh("", 0), HistoryChange.IGNORED)
-        self.assertIs(history.add_or_refresh("a", 0), HistoryChange.IGNORED)
+        self.assertIs(history.add_or_refresh(" ", 0), HistoryChange.IGNORED)
         self.assertEqual(history.items, [])
+
+    def test_adds_one_character_text(self) -> None:
+        history = make_history()
+
+        result = history.add_or_refresh("a", 0)
+
+        self.assertIs(result, HistoryChange.ADDED)
+        self.assertEqual([item.text for item in history.items], ["a"])
 
     def test_adds_new_text_to_top(self) -> None:
         history = make_history()

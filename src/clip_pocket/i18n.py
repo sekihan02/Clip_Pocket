@@ -43,6 +43,9 @@ TEXT = {
         "ctrl_double_tap": "Open with Ctrl double-tap",
         "right_triple_click": "Open with right-click triple-click (experimental)",
         "right_triple_click_hint": "May conflict with normal context menus. Keep it off unless you need it.",
+        "color_theme": "Color",
+        "opacity": "Opacity",
+        "opacity_value": "{percent}%",
         "retention": "Delete copied items after",
         "max_items": "Maximum copied items",
         "apply": "Apply",
@@ -93,6 +96,9 @@ TEXT = {
         "ctrl_double_tap": "Ctrl二回で開く",
         "right_triple_click": "右クリック三回で開く（実験）",
         "right_triple_click_hint": "通常の右クリックメニューと競合する場合があります。必要な場合だけ有効にしてください。",
+        "color_theme": "色",
+        "opacity": "透過率",
+        "opacity_value": "{percent}%",
         "retention": "コピーの削除までの期間",
         "max_items": "保存するコピー数",
         "apply": "適用",
@@ -118,6 +124,11 @@ RETENTION_OPTIONS = [
     ("7d", {"en": "7 days", "ja": "7日"}, 7 * 24 * 60 * 60),
     ("30d", {"en": "30 days", "ja": "30日"}, 30 * 24 * 60 * 60),
     ("unlimited", {"en": "Unlimited", "ja": "無制限"}, None),
+]
+
+COLOR_THEME_OPTIONS = [
+    ("light", {"en": "White", "ja": "白"}),
+    ("dark", {"en": "Black", "ja": "黒"}),
 ]
 
 
@@ -164,3 +175,24 @@ def retention_key_from_label(language: str, label: str) -> str:
         if labels[normalized] == label:
             return key
     return "24h"
+
+
+def color_theme_label(language: str, key: str) -> str:
+    normalized = normalize_language(language)
+    for option_key, labels in COLOR_THEME_OPTIONS:
+        if option_key == key:
+            return labels[normalized]
+    return COLOR_THEME_OPTIONS[0][1][normalized]
+
+
+def color_theme_labels(language: str) -> list[str]:
+    normalized = normalize_language(language)
+    return [labels[normalized] for _key, labels in COLOR_THEME_OPTIONS]
+
+
+def color_theme_key_from_label(language: str, label: str) -> str:
+    normalized = normalize_language(language)
+    for key, labels in COLOR_THEME_OPTIONS:
+        if labels[normalized] == label:
+            return key
+    return "light"

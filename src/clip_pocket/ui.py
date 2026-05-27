@@ -9,6 +9,8 @@ from clip_pocket.constants import (
     APP_NAME,
     AUTO_HIDE_INITIAL_DELAY_MS,
     AUTO_HIDE_MARGIN_PX,
+    AUTO_HIDE_POLL_INTERVAL_MS,
+    AUTO_HIDE_STILL_POINTER_TOLERANCE_PX,
     CLIPBOARD_RETRY_DELAYS_MS,
     MAX_PREVIEW_LENGTH,
     MAX_TEXT_LENGTH,
@@ -22,6 +24,9 @@ from clip_pocket.constants import (
 from clip_pocket.history import ClipboardHistory, ClipboardItem, HistoryChange
 from clip_pocket.i18n import (
     LANGUAGE_NAMES,
+    color_theme_key_from_label,
+    color_theme_label,
+    color_theme_labels,
     normalize_language,
     retention_key_from_label,
     retention_key_from_seconds,
@@ -31,14 +36,48 @@ from clip_pocket.i18n import (
     text,
 )
 from clip_pocket.resources import app_icon_path
-from clip_pocket.settings import AppSettings, load_settings, normalize_max_items, save_settings
+from clip_pocket.settings import (
+    AppSettings,
+    load_settings,
+    normalize_color_theme,
+    normalize_max_items,
+    normalize_window_opacity,
+    save_settings,
+)
 from clip_pocket.startup import is_startup_enabled, set_startup_enabled
 from clip_pocket.win32_host import WindowsEvent, WindowsEventType, WindowsHost
+
+
+THEME_PALETTES = {
+    "light": {
+        "background": "#f7f7f7",
+        "surface": "#ffffff",
+        "foreground": "#202124",
+        "muted": "#555555",
+        "border": "#d9d9d9",
+        "selection": "#2563eb",
+        "selection_text": "#ffffff",
+        "button": "#f2f2f2",
+        "button_active": "#e7e7e7",
+    },
+    "dark": {
+        "background": "#202124",
+        "surface": "#111315",
+        "foreground": "#f5f5f5",
+        "muted": "#c7c7c7",
+        "border": "#3a3a3a",
+        "selection": "#3b82f6",
+        "selection_text": "#ffffff",
+        "button": "#2b2d31",
+        "button_active": "#34373d",
+    },
+}
 
 
 class ClipPocketApp:
     def __init__(self, show_on_start: bool = False) -> None:
         self.root = tk.Tk()
+        self.style = ttk.Style(self.root)
         self.root.title(APP_NAME)
         self.root.geometry(WINDOW_SIZE)
         self.root.minsize(*WINDOW_MIN_SIZE)
@@ -69,6 +108,11 @@ class ClipPocketApp:
         self.language_var = tk.StringVar(value=LANGUAGE_NAMES[self.language])
         self.ctrl_double_tap_var = tk.BooleanVar(value=self.settings.ctrl_double_tap_enabled)
         self.right_triple_click_var = tk.BooleanVar(value=self.settings.right_triple_click_enabled)
+        self.color_theme_var = tk.StringVar(
+            value=color_theme_label(self.language, self.settings.color_theme)
+        )
+        self.opacity_var = tk.DoubleVar(value=self.settings.window_opacity * 100)
+        self.opacity_value_var = tk.StringVar()
         self.retention_var = tk.StringVar(
             value=retention_label(
                 self.language,
@@ -78,11 +122,13 @@ class ClipPocketApp:
         self.max_items_var = tk.StringVar(value=str(self.settings.max_items))
         self.keep_open_var = tk.BooleanVar(value=False)
         self.auto_hide_after_id: str | None = None
+        self.auto_hide_anchor_position: tuple[int, int] | None = None
         self.settings_window: tk.Toplevel | None = None
         self.settings_widgets: dict[str, tk.Misc] = {}
 
         self._build_ui()
         self._apply_language()
+        self._apply_visual_settings()
         self.root.update_idletasks()
 
         self.host = WindowsHost(
@@ -120,6 +166,7 @@ class ClipPocketApp:
         body.grid(row=1, column=0, sticky="nsew")
         body.columnconfigure(0, weight=1)
         body.rowconfigure(1, weight=1)
+        self.main_widgets["body"] = body
 
         heading = ttk.Label(body, font=("Yu Gothic UI", 11, "bold"))
         heading.grid(row=0, column=0, sticky="w", pady=(0, 6))
@@ -129,6 +176,7 @@ class ClipPocketApp:
         list_frame.grid(row=1, column=0, sticky="nsew")
         list_frame.columnconfigure(0, weight=1)
         list_frame.rowconfigure(0, weight=1)
+        self.main_widgets["list_frame"] = list_frame
 
         self.listbox = tk.Listbox(
             list_frame,
@@ -149,6 +197,7 @@ class ClipPocketApp:
         button_row = ttk.Frame(body)
         button_row.grid(row=2, column=0, sticky="ew", pady=(10, 0))
         button_row.columnconfigure(4, weight=1)
+        self.main_widgets["button_row"] = button_row
 
         restore_button = ttk.Button(
             button_row,
@@ -189,6 +238,7 @@ class ClipPocketApp:
         self.status_var = tk.StringVar(value="")
         status = ttk.Label(body, textvariable=self.status_var, foreground="#555555")
         status.grid(row=3, column=0, sticky="w", pady=(8, 0))
+        self.main_widgets["status"] = status
 
         self.item_menu = tk.Menu(self.root, tearoff=False)
         self.item_menu.add_command(
@@ -230,16 +280,24 @@ class ClipPocketApp:
         self.settings_widgets["ctrl_check"].configure(text=self.tr("ctrl_double_tap"))
         self.settings_widgets["right_check"].configure(text=self.tr("right_triple_click"))
         self.settings_widgets["right_hint"].configure(text=self.tr("right_triple_click_hint"))
+        self.settings_widgets["color_theme_label"].configure(text=self.tr("color_theme"))
+        self.settings_widgets["opacity_label"].configure(text=self.tr("opacity"))
         self.settings_widgets["retention_label"].configure(text=self.tr("retention"))
         self.settings_widgets["max_items_label"].configure(text=self.tr("max_items"))
         self.settings_widgets["apply_button"].configure(text=self.tr("apply"))
         self.settings_widgets["exit_button"].configure(text=self.tr("exit_app"))
         self.settings_widgets["close_button"].configure(text=self.tr("close"))
 
+        color_theme_combo = self.settings_widgets["color_theme_combo"]
+        color_theme_key = normalize_color_theme(self.settings.color_theme)
+        color_theme_combo.configure(values=color_theme_labels(self.language))
+        self.color_theme_var.set(color_theme_label(self.language, color_theme_key))
+
         retention_combo = self.settings_widgets["retention_combo"]
         retention_key = retention_key_from_seconds(self.settings.retention_seconds)
         retention_combo.configure(values=retention_labels(self.language))
         self.retention_var.set(retention_label(self.language, retention_key))
+        self._update_opacity_value_label()
 
     def _drain_host_events(self) -> None:
         while True:
@@ -400,6 +458,9 @@ class ClipPocketApp:
         self.language_var.set(LANGUAGE_NAMES[self.language])
         self.ctrl_double_tap_var.set(self.settings.ctrl_double_tap_enabled)
         self.right_triple_click_var.set(self.settings.right_triple_click_enabled)
+        self.color_theme_var.set(color_theme_label(self.language, self.settings.color_theme))
+        self.opacity_var.set(self.settings.window_opacity * 100)
+        self._update_opacity_value_label()
         self.retention_var.set(
             retention_label(
                 self.language,
@@ -473,8 +534,45 @@ class ClipPocketApp:
         right_hint.grid(row=5, column=0, columnspan=2, sticky="w", pady=(0, 6))
         self.settings_widgets["right_hint"] = right_hint
 
+        color_theme_label_widget = ttk.Label(frame)
+        color_theme_label_widget.grid(row=6, column=0, sticky="w", pady=(10, 4), padx=(0, 12))
+        self.settings_widgets["color_theme_label"] = color_theme_label_widget
+
+        color_theme_combo = ttk.Combobox(
+            frame,
+            textvariable=self.color_theme_var,
+            values=color_theme_labels(self.language),
+            state="readonly",
+            width=18,
+        )
+        color_theme_combo.grid(row=6, column=1, sticky="ew", pady=(10, 4))
+        self.settings_widgets["color_theme_combo"] = color_theme_combo
+
+        opacity_label_widget = ttk.Label(frame)
+        opacity_label_widget.grid(row=7, column=0, sticky="w", pady=4, padx=(0, 12))
+        self.settings_widgets["opacity_label"] = opacity_label_widget
+
+        opacity_row = ttk.Frame(frame)
+        opacity_row.grid(row=7, column=1, sticky="ew", pady=4)
+        opacity_row.columnconfigure(0, weight=1)
+        self.settings_widgets["opacity_row"] = opacity_row
+
+        opacity_scale = ttk.Scale(
+            opacity_row,
+            from_=60,
+            to=100,
+            variable=self.opacity_var,
+            command=self._on_opacity_scale_changed,
+        )
+        opacity_scale.grid(row=0, column=0, sticky="ew")
+        self.settings_widgets["opacity_scale"] = opacity_scale
+
+        opacity_value_label = ttk.Label(opacity_row, textvariable=self.opacity_value_var, width=5)
+        opacity_value_label.grid(row=0, column=1, sticky="e", padx=(8, 0))
+        self.settings_widgets["opacity_value_label"] = opacity_value_label
+
         retention_label_widget = ttk.Label(frame)
-        retention_label_widget.grid(row=6, column=0, sticky="w", pady=(10, 4), padx=(0, 12))
+        retention_label_widget.grid(row=8, column=0, sticky="w", pady=(10, 4), padx=(0, 12))
         self.settings_widgets["retention_label"] = retention_label_widget
 
         retention_combo = ttk.Combobox(
@@ -484,11 +582,11 @@ class ClipPocketApp:
             state="readonly",
             width=18,
         )
-        retention_combo.grid(row=6, column=1, sticky="ew", pady=(10, 4))
+        retention_combo.grid(row=8, column=1, sticky="ew", pady=(10, 4))
         self.settings_widgets["retention_combo"] = retention_combo
 
         max_items_label = ttk.Label(frame)
-        max_items_label.grid(row=7, column=0, sticky="w", pady=4, padx=(0, 12))
+        max_items_label.grid(row=9, column=0, sticky="w", pady=4, padx=(0, 12))
         self.settings_widgets["max_items_label"] = max_items_label
 
         max_items_spinbox = tk.Spinbox(
@@ -499,12 +597,13 @@ class ClipPocketApp:
             textvariable=self.max_items_var,
             width=8,
         )
-        max_items_spinbox.grid(row=7, column=1, sticky="w", pady=4)
+        max_items_spinbox.grid(row=9, column=1, sticky="w", pady=4)
         self.settings_widgets["max_items_spinbox"] = max_items_spinbox
 
         button_row = ttk.Frame(frame)
-        button_row.grid(row=8, column=0, columnspan=2, sticky="ew", pady=(14, 0))
+        button_row.grid(row=10, column=0, columnspan=2, sticky="ew", pady=(14, 0))
         button_row.columnconfigure(0, weight=1)
+        self.settings_widgets["button_row"] = button_row
 
         apply_button = ttk.Button(
             button_row,
@@ -528,6 +627,7 @@ class ClipPocketApp:
         self.settings_widgets["close_button"] = close_button
 
         self._apply_settings_language()
+        self._apply_visual_settings()
 
         window.update_idletasks()
         self._position_settings_window(window)
@@ -556,6 +656,10 @@ class ClipPocketApp:
         startup_enabled = self.startup_enabled_var.get()
         ctrl_double_tap_enabled = self.ctrl_double_tap_var.get()
         right_triple_click_enabled = self.right_triple_click_var.get()
+        color_theme = normalize_color_theme(
+            color_theme_key_from_label(self.language, self.color_theme_var.get())
+        )
+        window_opacity = normalize_window_opacity(self.opacity_var.get() / 100)
         retention_key = retention_key_from_label(self.language, self.retention_var.get())
         max_items = self._parse_max_items()
         retention_seconds = retention_seconds_from_key(retention_key)
@@ -565,6 +669,8 @@ class ClipPocketApp:
             right_triple_click_enabled=right_triple_click_enabled,
             retention_seconds=retention_seconds,
             max_items=max_items,
+            color_theme=color_theme,
+            window_opacity=window_opacity,
         )
         previous_startup_enabled = is_startup_enabled()
 
@@ -590,6 +696,7 @@ class ClipPocketApp:
 
         self.settings = new_settings
         self.language = language
+        self.opacity_var.set(self.settings.window_opacity * 100)
         self.history.retention_seconds = self.settings.retention_seconds
         self.history.max_items = max_items
         changed = self.history.enforce_max_items()
@@ -604,6 +711,7 @@ class ClipPocketApp:
             right_triple_click_enabled=right_triple_click_enabled,
         )
         self._apply_language()
+        self._apply_visual_settings()
         self.status_var.set(self.tr("status_settings_saved"))
         self._close_settings_window()
 
@@ -615,6 +723,159 @@ class ClipPocketApp:
         value = normalize_max_items(value)
         self.max_items_var.set(str(value))
         return value
+
+    def _apply_visual_settings(self) -> None:
+        theme = normalize_color_theme(self.settings.color_theme)
+        palette = THEME_PALETTES[theme]
+        opacity = normalize_window_opacity(self.settings.window_opacity)
+
+        self._configure_ttk_style(palette)
+        self._configure_main_window_visuals(palette, opacity)
+        self._configure_settings_window_visuals(palette, opacity)
+
+    def _configure_ttk_style(self, palette: dict[str, str]) -> None:
+        try:
+            self.style.theme_use("clam")
+        except tk.TclError:
+            pass
+
+        self.style.configure(
+            ".",
+            background=palette["background"],
+            foreground=palette["foreground"],
+            fieldbackground=palette["surface"],
+        )
+        self.style.configure("TFrame", background=palette["background"])
+        self.style.configure(
+            "TLabel",
+            background=palette["background"],
+            foreground=palette["foreground"],
+        )
+        self.style.configure(
+            "TCheckbutton",
+            background=palette["background"],
+            foreground=palette["foreground"],
+        )
+        self.style.map(
+            "TCheckbutton",
+            background=[("active", palette["background"])],
+            foreground=[("active", palette["foreground"])],
+        )
+        self.style.configure(
+            "TButton",
+            background=palette["button"],
+            foreground=palette["foreground"],
+            bordercolor=palette["border"],
+            focusthickness=1,
+            focuscolor=palette["selection"],
+        )
+        self.style.map(
+            "TButton",
+            background=[
+                ("active", palette["button_active"]),
+                ("pressed", palette["button_active"]),
+            ],
+            foreground=[("disabled", palette["muted"])],
+        )
+        self.style.configure(
+            "TCombobox",
+            fieldbackground=palette["surface"],
+            background=palette["button"],
+            foreground=palette["foreground"],
+            arrowcolor=palette["foreground"],
+            bordercolor=palette["border"],
+        )
+        self.style.map(
+            "TCombobox",
+            fieldbackground=[("readonly", palette["surface"])],
+            selectbackground=[("readonly", palette["surface"])],
+            selectforeground=[("readonly", palette["foreground"])],
+        )
+        self.style.configure(
+            "Horizontal.TScale",
+            background=palette["background"],
+            troughcolor=palette["surface"],
+            bordercolor=palette["border"],
+            lightcolor=palette["selection"],
+            darkcolor=palette["selection"],
+        )
+        self.root.option_add("*TCombobox*Listbox.background", palette["surface"])
+        self.root.option_add("*TCombobox*Listbox.foreground", palette["foreground"])
+        self.root.option_add("*TCombobox*Listbox.selectBackground", palette["selection"])
+        self.root.option_add("*TCombobox*Listbox.selectForeground", palette["selection_text"])
+
+    def _configure_main_window_visuals(self, palette: dict[str, str], opacity: float) -> None:
+        self.root.configure(background=palette["background"])
+        self._apply_window_opacity(self.root, opacity)
+        self.listbox.configure(
+            background=palette["surface"],
+            foreground=palette["foreground"],
+            selectbackground=palette["selection"],
+            selectforeground=palette["selection_text"],
+            highlightbackground=palette["border"],
+            highlightcolor=palette["selection"],
+        )
+        self.item_menu.configure(
+            background=palette["surface"],
+            foreground=palette["foreground"],
+            activebackground=palette["selection"],
+            activeforeground=palette["selection_text"],
+        )
+        for key in ("monitoring_label", "status"):
+            if key in self.main_widgets:
+                self.main_widgets[key].configure(foreground=palette["muted"])
+
+    def _configure_settings_window_visuals(self, palette: dict[str, str], opacity: float) -> None:
+        if self.settings_window is None or not self.settings_window.winfo_exists():
+            return
+
+        self.settings_window.configure(background=palette["background"])
+        self._apply_window_opacity(self.settings_window, opacity)
+        for key in ("right_hint", "opacity_value_label"):
+            if key in self.settings_widgets:
+                self.settings_widgets[key].configure(foreground=palette["muted"])
+
+        spinbox = self.settings_widgets.get("max_items_spinbox")
+        if isinstance(spinbox, tk.Spinbox):
+            try:
+                spinbox.configure(
+                    background=palette["surface"],
+                    foreground=palette["foreground"],
+                    buttonbackground=palette["button"],
+                    insertbackground=palette["foreground"],
+                    highlightbackground=palette["border"],
+                    highlightcolor=palette["selection"],
+                    selectbackground=palette["selection"],
+                    selectforeground=palette["selection_text"],
+                )
+            except tk.TclError:
+                spinbox.configure(
+                    background=palette["surface"],
+                    foreground=palette["foreground"],
+                    insertbackground=palette["foreground"],
+                    highlightbackground=palette["border"],
+                    highlightcolor=palette["selection"],
+                    selectbackground=palette["selection"],
+                    selectforeground=palette["selection_text"],
+                )
+
+    @staticmethod
+    def _apply_window_opacity(window: tk.Misc, opacity: float) -> None:
+        try:
+            window.attributes("-alpha", opacity)  # type: ignore[attr-defined]
+        except tk.TclError:
+            pass
+
+    def _on_opacity_scale_changed(self, _value: str) -> None:
+        self._update_opacity_value_label()
+
+    def _update_opacity_value_label(self) -> None:
+        try:
+            percent = round(float(self.opacity_var.get()))
+        except tk.TclError:
+            percent = 100
+        percent = min(max(percent, 60), 100)
+        self.opacity_value_var.set(self.tr("opacity_value", percent=percent))
 
     def _expire_items(self, now: float | None = None) -> None:
         if now is None:
@@ -667,12 +928,14 @@ class ClipPocketApp:
         self._position_near_pointer(x, y)
         self.root.deiconify()
         self.root.update_idletasks()
+        self.auto_hide_anchor_position = self._current_pointer_position()
         self._bring_window_to_front()
         self.status_var.set(self.tr("status_window_visible"))
         self._start_auto_hide_watch()
 
     def hide_window(self) -> None:
         self._cancel_auto_hide_watch()
+        self.auto_hide_anchor_position = None
         self.root.withdraw()
 
     def _hide_when_minimized(self, _event: tk.Event) -> None:
@@ -822,11 +1085,13 @@ class ClipPocketApp:
         if self.is_exiting or self.keep_open_var.get() or self.root.state() != "normal":
             return
         if self._is_primary_mouse_button_down():
-            self.auto_hide_after_id = self.root.after(250, self._auto_hide_if_pointer_left)
+            self.auto_hide_after_id = self.root.after(
+                AUTO_HIDE_POLL_INTERVAL_MS,
+                self._auto_hide_if_pointer_left,
+            )
             return
 
-        pointer_x = self.root.winfo_pointerx()
-        pointer_y = self.root.winfo_pointery()
+        pointer_x, pointer_y = self._current_pointer_position()
         left = self.root.winfo_rootx()
         top = self.root.winfo_rooty()
         right = left + self.root.winfo_width()
@@ -840,10 +1105,43 @@ class ClipPocketApp:
             or pointer_y > bottom + margin
         )
         if pointer_is_outside:
+            if self._pointer_has_not_moved_since_show(pointer_x, pointer_y):
+                self.auto_hide_after_id = self.root.after(
+                    AUTO_HIDE_POLL_INTERVAL_MS,
+                    self._auto_hide_if_pointer_left,
+                )
+                return
             self.hide_window()
             return
 
-        self.auto_hide_after_id = self.root.after(180, self._auto_hide_if_pointer_left)
+        self.auto_hide_anchor_position = None
+        self.auto_hide_after_id = self.root.after(
+            AUTO_HIDE_POLL_INTERVAL_MS,
+            self._auto_hide_if_pointer_left,
+        )
+
+    def _current_pointer_position(self) -> tuple[int, int]:
+        return (self.root.winfo_pointerx(), self.root.winfo_pointery())
+
+    def _pointer_has_not_moved_since_show(self, pointer_x: int, pointer_y: int) -> bool:
+        if self.auto_hide_anchor_position is None:
+            return False
+        return not self._point_moved(
+            self.auto_hide_anchor_position,
+            (pointer_x, pointer_y),
+            AUTO_HIDE_STILL_POINTER_TOLERANCE_PX,
+        )
+
+    @staticmethod
+    def _point_moved(
+        origin: tuple[int, int],
+        current: tuple[int, int],
+        tolerance_px: int,
+    ) -> bool:
+        return (
+            abs(current[0] - origin[0]) > tolerance_px
+            or abs(current[1] - origin[1]) > tolerance_px
+        )
 
     @staticmethod
     def _is_primary_mouse_button_down() -> bool:

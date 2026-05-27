@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import math
 import os
 from dataclasses import asdict, dataclass
 from pathlib import Path
@@ -12,6 +13,11 @@ from clip_pocket.i18n import normalize_language
 
 MIN_MAX_ITEMS = 10
 MAX_MAX_ITEMS = 1000
+SUPPORTED_COLOR_THEMES = ("light", "dark")
+DEFAULT_COLOR_THEME = "light"
+DEFAULT_WINDOW_OPACITY = 1.0
+MIN_WINDOW_OPACITY = 0.6
+MAX_WINDOW_OPACITY = 1.0
 
 
 def normalize_max_items(value: object) -> int:
@@ -40,6 +46,22 @@ def normalize_retention_seconds(value: object) -> int | None:
     return number
 
 
+def normalize_color_theme(value: object) -> str:
+    if isinstance(value, str) and value in SUPPORTED_COLOR_THEMES:
+        return value
+    return DEFAULT_COLOR_THEME
+
+
+def normalize_window_opacity(value: object) -> float:
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return DEFAULT_WINDOW_OPACITY
+    if not math.isfinite(number):
+        return DEFAULT_WINDOW_OPACITY
+    return min(max(number, MIN_WINDOW_OPACITY), MAX_WINDOW_OPACITY)
+
+
 @dataclass
 class AppSettings:
     language: str = "en"
@@ -47,6 +69,8 @@ class AppSettings:
     right_triple_click_enabled: bool = False
     retention_seconds: int | None = RETENTION_SECONDS
     max_items: int = MAX_ITEMS
+    color_theme: str = DEFAULT_COLOR_THEME
+    window_opacity: float = DEFAULT_WINDOW_OPACITY
 
     @classmethod
     def from_mapping(cls, value: dict[str, Any]) -> AppSettings:
@@ -64,6 +88,10 @@ class AppSettings:
                 value.get("retention_seconds", RETENTION_SECONDS)
             ),
             max_items=normalize_max_items(value.get("max_items", MAX_ITEMS)),
+            color_theme=normalize_color_theme(value.get("color_theme", DEFAULT_COLOR_THEME)),
+            window_opacity=normalize_window_opacity(
+                value.get("window_opacity", DEFAULT_WINDOW_OPACITY)
+            ),
         )
 
 

@@ -55,6 +55,10 @@ class UiHelpersTest(unittest.TestCase):
 
         self.assertIsNone(point)
 
+    def test_point_moved_uses_tolerance(self) -> None:
+        self.assertFalse(ClipPocketApp._point_moved((100, 100), (102, 103), 3))
+        self.assertTrue(ClipPocketApp._point_moved((100, 100), (104, 103), 3))
+
 
 if __name__ == "__main__":
     unittest.main()

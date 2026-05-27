@@ -21,6 +21,8 @@ Clip Pocket watches text copied to the Windows clipboard and keeps a short in-me
 
 ![Clip Pocket main window](docs/assets/clip-pocket-main.png)
 
+The screenshot shows the black color setting. The default color is white, and both color and opacity can be changed from `Settings`.
+
 ## Getting Started
 
 Download the Windows build from the GitHub release, unzip it, and run:
@@ -40,6 +42,7 @@ The experimental right-click triple-click gesture is disabled by default. Enable
 ## Features
 
 - Resident clipboard monitoring for copied text
+- One-character text is recorded; empty text is ignored
 - In-memory history, cleared when the app exits
 - Restore a selected item to the current clipboard
 - Manual paste only; Clip Pocket does not inject keystrokes or paste automatically
@@ -51,6 +54,8 @@ The experimental right-click triple-click gesture is disabled by default. Enable
 - English UI by default, with Japanese available in settings
 - Configurable retention period, including unlimited retention while the app is running
 - Configurable maximum item count
+- White or black window color
+- Configurable window opacity
 
 ## Install
 
@@ -70,10 +75,16 @@ Available settings:
 - Open with Ctrl double-tap
 - Open with right-click triple-click (experimental, off by default)
 - Language
+- Color
+- Opacity
 - Delete copied items after
 - Maximum copied items
 
 The notification-area menu also includes `Pause monitoring` / `Resume monitoring`. Paused clipboard changes are ignored and are not added later when monitoring resumes.
+
+## Window Behavior
+
+Clip Pocket opens near the pointer and keeps the window inside the screen. If the window has to shift away from the pointer at a screen edge, it stays visible until you move the pointer. After the pointer moves outside the window, the window hides quickly unless `Keep window open` is enabled.
 
 ## Security and Privacy
 
