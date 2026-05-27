@@ -29,7 +29,7 @@ from clip_pocket.i18n import (
     text,
 )
 from clip_pocket.resources import app_icon_path
-from clip_pocket.settings import load_settings, normalize_max_items, save_settings
+from clip_pocket.settings import AppSettings, load_settings, normalize_max_items, save_settings
 from clip_pocket.startup import is_startup_enabled, set_startup_enabled
 from clip_pocket.win32_host import WindowsEvent, WindowsEventType, WindowsHost
 
@@ -176,6 +176,10 @@ class ClipPocketApp:
         settings_button.grid(row=0, column=3, padx=(12, 0))
         self.main_widgets["settings_button"] = settings_button
 
+        monitoring_label = ttk.Label(button_row, foreground="#555555")
+        monitoring_label.grid(row=0, column=4, sticky="e", padx=(12, 10))
+        self.main_widgets["monitoring_label"] = monitoring_label
+
         self.count_label = ttk.Label(button_row, text="0件")
         self.count_label.grid(row=0, column=5, sticky="e")
 
@@ -203,6 +207,7 @@ class ClipPocketApp:
         self.main_widgets["delete_button"].configure(text=self.tr("delete"))
         self.main_widgets["keep_open_check"].configure(text=self.tr("keep_open"))
         self.main_widgets["settings_button"].configure(text=self.tr("menu_settings"))
+        self._update_monitoring_label()
         self.item_menu.entryconfigure(0, label=self.tr("restore"))
         self.item_menu.entryconfigure(1, label=self.tr("delete"))
         self.count_label.configure(text=self.tr("count", count=len(self.history.items)))
@@ -345,6 +350,7 @@ class ClipPocketApp:
     def _toggle_capture_paused(self) -> None:
         self.capture_paused = not self.capture_paused
         self.host.set_paused(self.capture_paused)
+        self._update_monitoring_label()
         if self.capture_paused:
             text = self._get_clipboard_text()
             if text is not None:
@@ -353,6 +359,12 @@ class ClipPocketApp:
         else:
             self.last_seen_clipboard_text = self._get_clipboard_text()
             self.status_var.set(self.tr("status_resumed"))
+
+    def _update_monitoring_label(self) -> None:
+        if "monitoring_label" not in self.main_widgets:
+            return
+        key = "monitoring_paused" if self.capture_paused else "monitoring_active"
+        self.main_widgets["monitoring_label"].configure(text=self.tr(key))
 
     def show_settings_window(self) -> None:
         if self.settings_window is not None and self.settings_window.winfo_exists():
@@ -523,19 +535,37 @@ class ClipPocketApp:
         right_triple_click_enabled = self.right_triple_click_var.get()
         retention_key = retention_key_from_label(self.language, self.retention_var.get())
         max_items = self._parse_max_items()
+        retention_seconds = retention_seconds_from_key(retention_key)
+        new_settings = AppSettings(
+            language=language,
+            ctrl_double_tap_enabled=ctrl_double_tap_enabled,
+            right_triple_click_enabled=right_triple_click_enabled,
+            retention_seconds=retention_seconds,
+            max_items=max_items,
+        )
+        previous_startup_enabled = is_startup_enabled()
+
+        if startup_enabled != previous_startup_enabled:
+            try:
+                set_startup_enabled(startup_enabled)
+            except OSError:
+                self.startup_enabled_var.set(previous_startup_enabled)
+                self.status_var.set(self.tr("status_startup_failed"))
+                return
 
         try:
-            set_startup_enabled(startup_enabled)
+            save_settings(new_settings)
         except OSError:
-            self.startup_enabled_var.set(is_startup_enabled())
-            self.status_var.set(self.tr("status_startup_failed"))
+            if startup_enabled != previous_startup_enabled:
+                try:
+                    set_startup_enabled(previous_startup_enabled)
+                except OSError:
+                    pass
+                self.startup_enabled_var.set(previous_startup_enabled)
+            self.status_var.set(self.tr("status_settings_failed"))
             return
 
-        self.settings.language = language
-        self.settings.ctrl_double_tap_enabled = ctrl_double_tap_enabled
-        self.settings.right_triple_click_enabled = right_triple_click_enabled
-        self.settings.retention_seconds = retention_seconds_from_key(retention_key)
-        self.settings.max_items = max_items
+        self.settings = new_settings
         self.language = language
         self.history.retention_seconds = self.settings.retention_seconds
         self.history.max_items = max_items
@@ -544,9 +574,6 @@ class ClipPocketApp:
         changed = self.history.prune(time.time()) or changed
         if changed:
             self._refresh_list()
-
-        if not self._save_settings():
-            return
 
         self.host.set_language(language)
         self.host.set_shortcut_options(
@@ -565,14 +592,6 @@ class ClipPocketApp:
         value = normalize_max_items(value)
         self.max_items_var.set(str(value))
         return value
-
-    def _save_settings(self) -> bool:
-        try:
-            save_settings(self.settings)
-        except OSError:
-            self.status_var.set(self.tr("status_settings_failed"))
-            return False
-        return True
 
     def _expire_items(self, now: float | None = None) -> None:
         if now is None:

@@ -2,13 +2,17 @@
 
 Clip Pocket is a small resident Windows app for temporarily keeping copied text and restoring it to the clipboard later.
 
-Current source version: v0.1.0
+Current source version: v0.2.0
 
 [日本語 README](docs/README.ja.md)
 
 ---
 
 Clip Pocket watches text copied to the Windows clipboard, keeps a short in-memory list, and lets you choose an older item to put back on the clipboard. It does not automatically paste into other apps; after restoring an item, you paste it yourself with `Ctrl+V`.
+
+## Screenshot
+
+![Clip Pocket main window](docs/assets/clip-pocket-main.png)
 
 ## Getting Started
 
@@ -63,6 +67,55 @@ Available settings:
 - Maximum copied items
 
 The notification-area menu also includes `Pause monitoring` / `Resume monitoring`. Paused clipboard changes are ignored and are not added later when monitoring resumes.
+
+## Security and Privacy
+
+- Copied text is stored in memory only.
+- Clipboard contents are not written to disk.
+- App settings and diagnostic logs are written under `%LOCALAPPDATA%\ClipPocket`.
+- No network access is used by the app.
+- The app does not automatically paste into other applications.
+- Very large copied text is ignored, and the in-memory history has a total text-size limit.
+- The Ctrl double-tap shortcut uses a low-level keyboard hook.
+- The right-click triple-click gesture uses a low-level mouse hook only when enabled.
+
+## Known Limitations
+
+- Text clipboard contents only.
+- Images, files, and rich text formatting are not saved.
+- History is cleared when the app exits.
+- The app does not paste automatically.
+- Global shortcuts may not work in some elevated apps, remote desktops, games, or security-sensitive windows.
+- The right-click triple-click gesture is experimental and may conflict with normal context menus.
+
+## Troubleshooting
+
+### The app starts but no window appears
+
+Clip Pocket starts hidden in the notification area. Click the notification-area icon, double-tap `Ctrl`, or run `ClipPocket.exe` again.
+
+### Ctrl double-tap does not open the window
+
+Open `Settings` and make sure `Open with Ctrl double-tap` is enabled. Some apps may block or override global keyboard hooks.
+
+### Windows shows a warning
+
+Unsigned executables may trigger Windows SmartScreen. Only run builds downloaded from the official release page, or build from source yourself.
+
+## Uninstall
+
+Clip Pocket does not install files outside the folder you extracted, but it may save local settings and diagnostic logs.
+
+1. Quit Clip Pocket from the notification-area menu.
+2. If startup is enabled, open `Settings` and turn off `Start when Windows starts`.
+3. Delete the extracted `ClipPocket` folder.
+4. To remove local settings and logs, delete:
+
+```text
+%LOCALAPPDATA%\ClipPocket
+```
+
+Clipboard history itself is kept in memory only and is cleared when the app exits.
 
 ## Build from Source
 
@@ -127,16 +180,6 @@ src/clip_pocket/
 ```
 
 Clip Pocket keeps the Tkinter UI and Win32 integration separate. Windows messages are received by a hidden Win32 window and forwarded to the UI thread through a queue.
-
-## Security and Privacy
-
-- Clipboard history is stored in memory only.
-- No network access is used by the app.
-- No clipboard contents are written to disk.
-- The app does not automatically paste into other applications.
-- Very large copied text is ignored, and the in-memory history has a total text-size limit.
-- The Ctrl double-tap shortcut uses a low-level keyboard hook.
-- The right-click triple-click gesture uses a low-level mouse hook only when enabled.
 
 ## Project Status
 

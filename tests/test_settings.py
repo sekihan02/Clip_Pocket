@@ -63,6 +63,26 @@ class SettingsTest(unittest.TestCase):
 
         self.assertEqual(settings.retention_seconds, 24 * 60 * 60)
 
+    def test_load_settings_clamps_max_items(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "settings.json"
+            path.write_text(json.dumps({"max_items": 5}), encoding="utf-8")
+            low_settings = load_settings(path)
+
+            path.write_text(json.dumps({"max_items": 5000}), encoding="utf-8")
+            high_settings = load_settings(path)
+
+        self.assertEqual(low_settings.max_items, 10)
+        self.assertEqual(high_settings.max_items, 1000)
+
+    def test_load_settings_normalizes_unknown_language(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "settings.json"
+            path.write_text(json.dumps({"language": "fr"}), encoding="utf-8")
+            settings = load_settings(path)
+
+        self.assertEqual(settings.language, "en")
+
     def test_save_settings_replaces_existing_file(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "settings.json"

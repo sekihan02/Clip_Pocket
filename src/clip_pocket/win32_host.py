@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import ctypes
 import threading
+import time
 from dataclasses import dataclass
 from enum import Enum, auto
 from typing import Callable
@@ -260,6 +261,7 @@ class WindowsHost:
     MENU_SETTINGS = 2
     MENU_PAUSE = 3
     MENU_EXIT = 4
+    ERROR_CLASS_ALREADY_EXISTS = 1410
 
     def __init__(
         self,
@@ -435,7 +437,17 @@ class WindowsHost:
         window_class.hInstance = instance
         window_class.lpszClassName = HIDDEN_WINDOW_CLASS
 
-        self.user32.RegisterClassW(ctypes.byref(window_class))
+        atom = self.user32.RegisterClassW(ctypes.byref(window_class))
+        if not atom and ctypes.get_last_error() != self.ERROR_CLASS_ALREADY_EXISTS:
+            self.ready.set()
+            self.emit(
+                WindowsEvent(
+                    WindowsEventType.WARNING,
+                    self.tr("warning_windows_host"),
+                )
+            )
+            return
+
         hwnd = self.user32.CreateWindowExW(
             0,
             HIDDEN_WINDOW_CLASS,
@@ -801,9 +813,13 @@ def request_existing_instance_window() -> bool:
     ]
     user32.MessageBoxW.restype = ctypes.c_int
 
-    hwnd = user32.FindWindowW(HIDDEN_WINDOW_CLASS, APP_NAME)
-    if hwnd:
-        return bool(user32.PostMessageW(hwnd, WindowsHost.WM_SHOW_REQUEST, 0, 0))
+    for delay_seconds in (0.0, 0.05, 0.1, 0.2):
+        if delay_seconds:
+            time.sleep(delay_seconds)
+
+        hwnd = user32.FindWindowW(HIDDEN_WINDOW_CLASS, APP_NAME)
+        if hwnd:
+            return bool(user32.PostMessageW(hwnd, WindowsHost.WM_SHOW_REQUEST, 0, 0))
 
     user32.MessageBoxW(
         None,

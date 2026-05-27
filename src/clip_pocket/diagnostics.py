@@ -4,6 +4,7 @@ import logging
 import os
 import sys
 import traceback
+from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
 from clip_pocket.constants import APP_NAME
@@ -21,11 +22,19 @@ def log_file_path() -> Path:
 def configure_logging() -> Path:
     path = log_file_path()
     path.parent.mkdir(parents=True, exist_ok=True)
-    logging.basicConfig(
-        filename=path,
-        level=logging.INFO,
-        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+    handler = RotatingFileHandler(
+        path,
+        maxBytes=512_000,
+        backupCount=3,
         encoding="utf-8",
+    )
+    handler.setFormatter(
+        logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s")
+    )
+    logging.basicConfig(
+        level=logging.INFO,
+        handlers=[handler],
+        force=True,
     )
     logging.info("Starting %s", APP_NAME)
     return path

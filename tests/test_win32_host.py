@@ -10,6 +10,9 @@ class Win32HostTest(unittest.TestCase):
     def test_double_ctrl_tap_rejects_slow_taps(self) -> None:
         self.assertFalse(is_double_ctrl_tap(100, 700))
 
+    def test_double_ctrl_tap_rejects_zero_elapsed_time(self) -> None:
+        self.assertFalse(is_double_ctrl_tap(100, 100))
+
     def test_double_ctrl_tap_handles_tick_count_rollover(self) -> None:
         self.assertTrue(is_double_ctrl_tap((2**32) - 100, 50))
 
