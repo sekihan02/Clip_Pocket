@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import queue
-import sys
 import time
 import tkinter as tk
 from tkinter import ttk
@@ -664,9 +663,10 @@ class ClipPocketApp:
 
     def show_window(self, x: int | None = None, y: int | None = None) -> None:
         self._cancel_auto_hide_watch()
-        self.root.deiconify()
         self.root.update_idletasks()
         self._position_near_pointer(x, y)
+        self.root.deiconify()
+        self.root.update_idletasks()
         self._bring_window_to_front()
         self.status_var.set(self.tr("status_window_visible"))
         self._start_auto_hide_watch()
@@ -680,15 +680,14 @@ class ClipPocketApp:
             self.root.after(0, self.hide_window)
 
     def _position_near_pointer(self, x: int | None, y: int | None) -> None:
-        pointer_x = x if x is not None else self.root.winfo_pointerx()
-        pointer_y = y if y is not None else self.root.winfo_pointery()
+        pointer_x, pointer_y = self._window_anchor_point(x, y)
 
         width = max(self.root.winfo_width(), self.root.winfo_reqwidth())
         height = max(self.root.winfo_height(), self.root.winfo_reqheight())
-        bounds_x, bounds_y, bounds_width, bounds_height = self._screen_bounds_near_pointer(
-            pointer_x,
-            pointer_y,
-        )
+        bounds_x = self.root.winfo_vrootx()
+        bounds_y = self.root.winfo_vrooty()
+        bounds_width = self.root.winfo_vrootwidth()
+        bounds_height = self.root.winfo_vrootheight()
 
         left = pointer_x - 36
         top = pointer_y - 36
@@ -704,71 +703,62 @@ class ClipPocketApp:
         )
         self.root.geometry(f"{width}x{height}+{left}+{top}")
 
-    def _screen_bounds_near_pointer(self, pointer_x: int, pointer_y: int) -> tuple[int, int, int, int]:
-        if sys.platform == "win32":
-            bounds = self._windows_work_area_near_pointer(pointer_x, pointer_y)
-            if bounds is not None:
-                return bounds
+    def _window_anchor_point(self, x: int | None, y: int | None) -> tuple[int, int]:
+        if x is not None and y is not None:
+            converted = self._convert_win32_point_to_tk_coordinates(x, y)
+            if converted is not None:
+                return converted
+        return self.root.winfo_pointerx(), self.root.winfo_pointery()
 
-        return (
-            self.root.winfo_vrootx(),
-            self.root.winfo_vrooty(),
-            self.root.winfo_vrootwidth(),
-            self.root.winfo_vrootheight(),
+    def _convert_win32_point_to_tk_coordinates(self, x: int, y: int) -> tuple[int, int] | None:
+        win32_bounds = self._win32_virtual_screen_bounds()
+        if win32_bounds is None:
+            return None
+
+        return self._map_point_between_bounds(
+            x,
+            y,
+            win32_bounds,
+            (
+                self.root.winfo_vrootx(),
+                self.root.winfo_vrooty(),
+                self.root.winfo_vrootwidth(),
+                self.root.winfo_vrootheight(),
+            ),
         )
 
     @staticmethod
-    def _windows_work_area_near_pointer(
-        pointer_x: int,
-        pointer_y: int,
-    ) -> tuple[int, int, int, int] | None:
+    def _win32_virtual_screen_bounds() -> tuple[int, int, int, int] | None:
         try:
             import ctypes
-            from ctypes import wintypes
 
-            class Rect(ctypes.Structure):
-                _fields_ = [
-                    ("left", wintypes.LONG),
-                    ("top", wintypes.LONG),
-                    ("right", wintypes.LONG),
-                    ("bottom", wintypes.LONG),
-                ]
-
-            class MonitorInfo(ctypes.Structure):
-                _fields_ = [
-                    ("cbSize", wintypes.DWORD),
-                    ("rcMonitor", Rect),
-                    ("rcWork", Rect),
-                    ("dwFlags", wintypes.DWORD),
-                ]
-
-            user32 = ctypes.WinDLL("user32", use_last_error=True)
-            user32.MonitorFromPoint.argtypes = [wintypes.POINT, wintypes.DWORD]
-            user32.MonitorFromPoint.restype = wintypes.HANDLE
-            user32.GetMonitorInfoW.argtypes = [
-                wintypes.HANDLE,
-                ctypes.POINTER(MonitorInfo),
-            ]
-            user32.GetMonitorInfoW.restype = wintypes.BOOL
-            point = wintypes.POINT(pointer_x, pointer_y)
-            monitor = user32.MonitorFromPoint(point, 2)
-            if not monitor:
-                return None
-
-            info = MonitorInfo()
-            info.cbSize = ctypes.sizeof(MonitorInfo)
-            if not user32.GetMonitorInfoW(monitor, ctypes.byref(info)):
-                return None
-
-            work = info.rcWork
-            return (
-                int(work.left),
-                int(work.top),
-                int(work.right - work.left),
-                int(work.bottom - work.top),
-            )
-        except (AttributeError, OSError, TypeError):
+            user32 = ctypes.windll.user32
+            left = int(user32.GetSystemMetrics(76))
+            top = int(user32.GetSystemMetrics(77))
+            width = int(user32.GetSystemMetrics(78))
+            height = int(user32.GetSystemMetrics(79))
+        except (AttributeError, OSError):
             return None
+
+        if width <= 0 or height <= 0:
+            return None
+        return (left, top, width, height)
+
+    @staticmethod
+    def _map_point_between_bounds(
+        x: int,
+        y: int,
+        source_bounds: tuple[int, int, int, int],
+        target_bounds: tuple[int, int, int, int],
+    ) -> tuple[int, int] | None:
+        source_x, source_y, source_width, source_height = source_bounds
+        target_x, target_y, target_width, target_height = target_bounds
+        if source_width <= 0 or source_height <= 0 or target_width <= 0 or target_height <= 0:
+            return None
+
+        mapped_x = target_x + round((x - source_x) * (target_width / source_width))
+        mapped_y = target_y + round((y - source_y) * (target_height / source_height))
+        return (mapped_x, mapped_y)
 
     @staticmethod
     def _clamp_window_origin(
@@ -831,6 +821,9 @@ class ClipPocketApp:
         self.auto_hide_after_id = None
         if self.is_exiting or self.keep_open_var.get() or self.root.state() != "normal":
             return
+        if self._is_primary_mouse_button_down():
+            self.auto_hide_after_id = self.root.after(250, self._auto_hide_if_pointer_left)
+            return
 
         pointer_x = self.root.winfo_pointerx()
         pointer_y = self.root.winfo_pointery()
@@ -851,6 +844,15 @@ class ClipPocketApp:
             return
 
         self.auto_hide_after_id = self.root.after(180, self._auto_hide_if_pointer_left)
+
+    @staticmethod
+    def _is_primary_mouse_button_down() -> bool:
+        try:
+            import ctypes
+
+            return bool(ctypes.windll.user32.GetAsyncKeyState(0x01) & 0x8000)
+        except (AttributeError, OSError):
+            return False
 
     def exit_app(self) -> None:
         self.is_exiting = True

@@ -35,6 +35,26 @@ class UiHelpersTest(unittest.TestCase):
         self.assertEqual(left, 1152)
         self.assertEqual(top, 592)
 
+    def test_win32_point_is_mapped_to_tk_coordinate_bounds(self) -> None:
+        point = ClipPocketApp._map_point_between_bounds(
+            3000,
+            1500,
+            (0, 0, 3840, 2160),
+            (0, 0, 2560, 1440),
+        )
+
+        self.assertEqual(point, (2000, 1000))
+
+    def test_point_mapping_rejects_empty_bounds(self) -> None:
+        point = ClipPocketApp._map_point_between_bounds(
+            100,
+            100,
+            (0, 0, 0, 1080),
+            (0, 0, 1920, 1080),
+        )
+
+        self.assertIsNone(point)
+
 
 if __name__ == "__main__":
     unittest.main()
