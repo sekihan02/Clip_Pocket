@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import queue
+import sys
 import time
 import tkinter as tk
 from tkinter import ttk
 
 from clip_pocket.constants import (
     APP_NAME,
+    AUTO_HIDE_INITIAL_DELAY_MS,
     AUTO_HIDE_MARGIN_PX,
     CLIPBOARD_RETRY_DELAYS_MS,
     MAX_PREVIEW_LENGTH,
@@ -14,6 +16,7 @@ from clip_pocket.constants import (
     MAX_TOTAL_TEXT_LENGTH,
     MIN_TEXT_LENGTH,
     RETENTION_SECONDS,
+    WINDOW_SCREEN_MARGIN_PX,
     WINDOW_MIN_SIZE,
     WINDOW_SIZE,
 )
@@ -58,7 +61,8 @@ class ClipPocketApp:
         )
         self.history.retention_seconds = self.settings.retention_seconds
         self.events: queue.SimpleQueue[WindowsEvent] = queue.SimpleQueue()
-        self.last_seen_clipboard_text = self._get_clipboard_text()
+        self.suppress_next_clipboard_text: str | None = None
+        self.suppress_clear_after_id: str | None = None
         self.capture_paused = False
         self.is_exiting = False
         self.main_widgets: dict[str, tk.Misc] = {}
@@ -266,9 +270,6 @@ class ClipPocketApp:
 
     def capture_clipboard_text(self) -> None:
         if self.capture_paused:
-            text = self._get_clipboard_text()
-            if text is not None:
-                self.last_seen_clipboard_text = text
             return
         self._capture_clipboard_text_with_retries(0)
 
@@ -286,10 +287,12 @@ class ClipPocketApp:
                 )
             return
 
-        if text == self.last_seen_clipboard_text:
-            return
+        if self.suppress_next_clipboard_text is not None:
+            if text == self.suppress_next_clipboard_text:
+                self._clear_clipboard_suppression()
+                return
+            self._clear_clipboard_suppression()
 
-        self.last_seen_clipboard_text = text
         self._record_text(text)
 
     def _get_clipboard_text(self) -> str | None:
@@ -317,18 +320,43 @@ class ClipPocketApp:
 
         item = self.history.items[selected[0]]
 
+        self._suppress_next_clipboard_update(item.text)
         try:
             self.root.clipboard_clear()
             self.root.clipboard_append(item.text)
             self.root.update_idletasks()
         except tk.TclError:
+            self._clear_clipboard_suppression()
             self.status_var.set(self.tr("status_restore_failed"))
             return
 
-        self.last_seen_clipboard_text = item.text
         new_index = self.history.touch(selected[0], time.time())
         self._refresh_list(select_index=new_index)
         self.status_var.set(self.tr("status_restored"))
+
+    def _suppress_next_clipboard_update(self, text: str) -> None:
+        self._cancel_clipboard_suppression_timer()
+        self.suppress_next_clipboard_text = text
+        self.suppress_clear_after_id = self.root.after(
+            1_500,
+            self._expire_clipboard_suppression,
+        )
+
+    def _clear_clipboard_suppression(self) -> None:
+        self._cancel_clipboard_suppression_timer()
+        self.suppress_next_clipboard_text = None
+
+    def _expire_clipboard_suppression(self) -> None:
+        self.suppress_clear_after_id = None
+        self.suppress_next_clipboard_text = None
+
+    def _cancel_clipboard_suppression_timer(self) -> None:
+        if self.suppress_clear_after_id is not None:
+            try:
+                self.root.after_cancel(self.suppress_clear_after_id)
+            except tk.TclError:
+                pass
+            self.suppress_clear_after_id = None
 
     def delete_selected_items(self, _event: tk.Event | None = None) -> None:
         selected = list(self.listbox.curselection())
@@ -352,12 +380,8 @@ class ClipPocketApp:
         self.host.set_paused(self.capture_paused)
         self._update_monitoring_label()
         if self.capture_paused:
-            text = self._get_clipboard_text()
-            if text is not None:
-                self.last_seen_clipboard_text = text
             self.status_var.set(self.tr("status_paused"))
         else:
-            self.last_seen_clipboard_text = self._get_clipboard_text()
             self.status_var.set(self.tr("status_resumed"))
 
     def _update_monitoring_label(self) -> None:
@@ -639,11 +663,11 @@ class ClipPocketApp:
         self.item_menu.grab_release()
 
     def show_window(self, x: int | None = None, y: int | None = None) -> None:
+        self._cancel_auto_hide_watch()
         self.root.deiconify()
         self.root.update_idletasks()
         self._position_near_pointer(x, y)
-        self.root.lift()
-        self.root.focus_force()
+        self._bring_window_to_front()
         self.status_var.set(self.tr("status_window_visible"))
         self._start_auto_hide_watch()
 
@@ -661,24 +685,142 @@ class ClipPocketApp:
 
         width = max(self.root.winfo_width(), self.root.winfo_reqwidth())
         height = max(self.root.winfo_height(), self.root.winfo_reqheight())
-        bounds_x = self.root.winfo_vrootx()
-        bounds_y = self.root.winfo_vrooty()
-        bounds_width = self.root.winfo_vrootwidth()
-        bounds_height = self.root.winfo_vrootheight()
+        bounds_x, bounds_y, bounds_width, bounds_height = self._screen_bounds_near_pointer(
+            pointer_x,
+            pointer_y,
+        )
 
         left = pointer_x - 36
         top = pointer_y - 36
-        max_left = max(bounds_x, bounds_x + bounds_width - width)
-        max_top = max(bounds_y, bounds_y + bounds_height - height)
-
-        left = min(max(left, bounds_x), max_left)
-        top = min(max(top, bounds_y), max_top)
+        left, top = self._clamp_window_origin(
+            left,
+            top,
+            width,
+            height,
+            bounds_x,
+            bounds_y,
+            bounds_width,
+            bounds_height,
+        )
         self.root.geometry(f"{width}x{height}+{left}+{top}")
+
+    def _screen_bounds_near_pointer(self, pointer_x: int, pointer_y: int) -> tuple[int, int, int, int]:
+        if sys.platform == "win32":
+            bounds = self._windows_work_area_near_pointer(pointer_x, pointer_y)
+            if bounds is not None:
+                return bounds
+
+        return (
+            self.root.winfo_vrootx(),
+            self.root.winfo_vrooty(),
+            self.root.winfo_vrootwidth(),
+            self.root.winfo_vrootheight(),
+        )
+
+    @staticmethod
+    def _windows_work_area_near_pointer(
+        pointer_x: int,
+        pointer_y: int,
+    ) -> tuple[int, int, int, int] | None:
+        try:
+            import ctypes
+            from ctypes import wintypes
+
+            class Rect(ctypes.Structure):
+                _fields_ = [
+                    ("left", wintypes.LONG),
+                    ("top", wintypes.LONG),
+                    ("right", wintypes.LONG),
+                    ("bottom", wintypes.LONG),
+                ]
+
+            class MonitorInfo(ctypes.Structure):
+                _fields_ = [
+                    ("cbSize", wintypes.DWORD),
+                    ("rcMonitor", Rect),
+                    ("rcWork", Rect),
+                    ("dwFlags", wintypes.DWORD),
+                ]
+
+            user32 = ctypes.WinDLL("user32", use_last_error=True)
+            user32.MonitorFromPoint.argtypes = [wintypes.POINT, wintypes.DWORD]
+            user32.MonitorFromPoint.restype = wintypes.HANDLE
+            user32.GetMonitorInfoW.argtypes = [
+                wintypes.HANDLE,
+                ctypes.POINTER(MonitorInfo),
+            ]
+            user32.GetMonitorInfoW.restype = wintypes.BOOL
+            point = wintypes.POINT(pointer_x, pointer_y)
+            monitor = user32.MonitorFromPoint(point, 2)
+            if not monitor:
+                return None
+
+            info = MonitorInfo()
+            info.cbSize = ctypes.sizeof(MonitorInfo)
+            if not user32.GetMonitorInfoW(monitor, ctypes.byref(info)):
+                return None
+
+            work = info.rcWork
+            return (
+                int(work.left),
+                int(work.top),
+                int(work.right - work.left),
+                int(work.bottom - work.top),
+            )
+        except (AttributeError, OSError, TypeError):
+            return None
+
+    @staticmethod
+    def _clamp_window_origin(
+        left: int,
+        top: int,
+        width: int,
+        height: int,
+        bounds_x: int,
+        bounds_y: int,
+        bounds_width: int,
+        bounds_height: int,
+    ) -> tuple[int, int]:
+        margin = WINDOW_SCREEN_MARGIN_PX
+        min_left = bounds_x + margin
+        min_top = bounds_y + margin
+        max_left = bounds_x + max(0, bounds_width - width - margin)
+        max_top = bounds_y + max(0, bounds_height - height - margin)
+
+        if max_left < min_left:
+            min_left = max_left = bounds_x
+        if max_top < min_top:
+            min_top = max_top = bounds_y
+
+        return (
+            min(max(left, min_left), max_left),
+            min(max(top, min_top), max_top),
+        )
+
+    def _bring_window_to_front(self) -> None:
+        try:
+            self.root.attributes("-topmost", True)
+        except tk.TclError:
+            pass
+        self.root.lift()
+        self.root.focus_force()
+        self.root.after(700, self._release_temporary_topmost)
+
+    def _release_temporary_topmost(self) -> None:
+        if self.is_exiting or self.root.state() != "normal":
+            return
+        try:
+            self.root.attributes("-topmost", False)
+        except tk.TclError:
+            pass
 
     def _start_auto_hide_watch(self) -> None:
         self._cancel_auto_hide_watch()
         if not self.keep_open_var.get() and self.root.state() == "normal":
-            self.auto_hide_after_id = self.root.after(300, self._auto_hide_if_pointer_left)
+            self.auto_hide_after_id = self.root.after(
+                AUTO_HIDE_INITIAL_DELAY_MS,
+                self._auto_hide_if_pointer_left,
+            )
 
     def _cancel_auto_hide_watch(self) -> None:
         if self.auto_hide_after_id is not None:
@@ -713,5 +855,6 @@ class ClipPocketApp:
     def exit_app(self) -> None:
         self.is_exiting = True
         self._cancel_auto_hide_watch()
+        self._cancel_clipboard_suppression_timer()
         self.host.stop()
         self.root.destroy()

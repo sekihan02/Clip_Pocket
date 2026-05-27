@@ -1,6 +1,6 @@
 # OSS readiness check
 
-Last checked: 2026-05-25
+Last checked: 2026-05-27
 
 ## Name
 
@@ -51,4 +51,6 @@ Development and local deployment should use uv:
 uv run clip-pocket
 ```
 
-Executable packaging can be added later after deciding whether to use PyInstaller, Nuitka, or a native Windows installer. That decision should be made with license and release automation requirements in mind.
+Executable packaging is currently implemented with PyInstaller through `tools/build_exe.py`.
+Release builds use the one-folder Windows bundle documented in the README.
+If distribution grows beyond GitHub Releases, revisit whether an installer or signed executable is needed.

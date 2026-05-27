@@ -28,7 +28,8 @@ Clip Pocket is split into small modules so the app can be reviewed and tested be
 
 - `clip_pocket.settings`
   - Owns lightweight local settings persisted under the current user's local app-data directory.
-  - Stores gesture settings only; startup registration stays in `clip_pocket.startup`.
+  - Stores UI language, gesture options, retention period, and maximum item count.
+  - Startup registration itself stays in `clip_pocket.startup`.
 
 - `clip_pocket.startup`
   - Owns per-user login startup registration.
@@ -46,12 +47,12 @@ Clip Pocket is split into small modules so the app can be reviewed and tested be
 - History is in memory only.
 - No SQLite or persistent storage.
 - No automatic paste into other applications.
-- No classification, search, pinning, memo, or sync behavior.
+- No classification, search, item pinning, memo, or sync behavior.
 
-## Public-release checklist
+## Release checklist
 
-- Choose the final product name.
-- Recheck GitHub, PyPI, Microsoft Store, and trademark databases for the final name.
-- Add an app icon instead of the default Windows icon.
-- Decide packaging: wheel only, PyInstaller/Nuitka executable, or installer.
-- Add a release workflow after packaging is decided.
+- Recheck the product name before wider distribution.
+- Verify the Windows release ZIP on a clean Windows machine.
+- Confirm the notification-area icon, Ctrl double-tap, and clipboard monitoring.
+- Keep README, release notes, and version numbers in sync.
+- Add more release automation if releases become frequent.

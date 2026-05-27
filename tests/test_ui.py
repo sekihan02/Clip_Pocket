@@ -20,6 +20,21 @@ class UiHelpersTest(unittest.TestCase):
         self.assertLessEqual(len(preview), MAX_PREVIEW_LENGTH)
         self.assertTrue(preview.endswith("..."))
 
+    def test_window_origin_is_clamped_inside_screen_bounds(self) -> None:
+        left, top = ClipPocketApp._clamp_window_origin(
+            1900,
+            1060,
+            760,
+            480,
+            0,
+            0,
+            1920,
+            1080,
+        )
+
+        self.assertEqual(left, 1152)
+        self.assertEqual(top, 592)
+
 
 if __name__ == "__main__":
     unittest.main()

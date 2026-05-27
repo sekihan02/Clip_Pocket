@@ -1,14 +1,21 @@
 # Clip Pocket
 
-Clip Pocket is a small resident Windows app for temporarily keeping copied text and restoring it to the clipboard later.
+[![CI](https://github.com/sekihan02/Clip_Pocket/actions/workflows/ci.yml/badge.svg)](https://github.com/sekihan02/Clip_Pocket/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/sekihan02/Clip_Pocket?label=release)](https://github.com/sekihan02/Clip_Pocket/releases)
+[![License](https://img.shields.io/github/license/sekihan02/Clip_Pocket)](LICENSE)
+![Python](https://img.shields.io/badge/python-3.11%2B-blue)
+![Platform](https://img.shields.io/badge/platform-Windows-0078D4)
+[![Docs](https://img.shields.io/badge/docs-English%20%7C%20日本語-informational)](docs/README.ja.md)
 
-Current source version: v0.2.0
+Clip Pocket is a small resident Windows app for keeping copied text temporarily and choosing it again when you want to paste it later.
+
+Current source version: v0.2.1
 
 [日本語 README](docs/README.ja.md)
 
 ---
 
-Clip Pocket watches text copied to the Windows clipboard, keeps a short in-memory list, and lets you choose an older item to put back on the clipboard. It does not automatically paste into other apps; after restoring an item, you paste it yourself with `Ctrl+V`.
+Clip Pocket watches text copied to the Windows clipboard and keeps a short in-memory list. When you want to paste something you copied earlier, open Clip Pocket, double-click that item to make it the current clipboard text, then paste with `Ctrl+V`.
 
 ## Screenshot
 
@@ -38,7 +45,7 @@ The experimental right-click triple-click gesture is disabled by default. Enable
 - Manual paste only; Clip Pocket does not inject keystrokes or paste automatically
 - Duplicate copies are refreshed instead of added again
 - Delete unwanted items with `Delete`, the delete button, or the item context menu
-- Auto-hide window behavior with a pin option
+- Auto-hide window behavior, with an option to keep the window open
 - Settings from the notification-area icon or the main window
 - Temporary pause/resume from the notification-area icon
 - English UI by default, with Japanese available in settings
@@ -84,6 +91,7 @@ The notification-area menu also includes `Pause monitoring` / `Resume monitoring
 - Text clipboard contents only.
 - Images, files, and rich text formatting are not saved.
 - History is cleared when the app exits.
+- Clip Pocket only records clipboard changes while it is running. Text that was already on the clipboard before startup is not added automatically.
 - The app does not paste automatically.
 - Global shortcuts may not work in some elevated apps, remote desktops, games, or security-sensitive windows.
 - The right-click triple-click gesture is experimental and may conflict with normal context menus.
