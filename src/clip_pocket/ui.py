@@ -143,7 +143,7 @@ class ClipPocketApp:
 
         button_row = ttk.Frame(body)
         button_row.grid(row=2, column=0, sticky="ew", pady=(10, 0))
-        button_row.columnconfigure(3, weight=1)
+        button_row.columnconfigure(4, weight=1)
 
         restore_button = ttk.Button(
             button_row,
@@ -167,8 +167,15 @@ class ClipPocketApp:
         keep_open_check.grid(row=0, column=2, padx=(16, 0), sticky="w")
         self.main_widgets["keep_open_check"] = keep_open_check
 
+        settings_button = ttk.Button(
+            button_row,
+            command=self.show_settings_window,
+        )
+        settings_button.grid(row=0, column=3, padx=(12, 0))
+        self.main_widgets["settings_button"] = settings_button
+
         self.count_label = ttk.Label(button_row, text="0件")
-        self.count_label.grid(row=0, column=4, sticky="e")
+        self.count_label.grid(row=0, column=5, sticky="e")
 
         self.status_var = tk.StringVar(value="")
         status = ttk.Label(body, textvariable=self.status_var, foreground="#555555")
@@ -193,6 +200,7 @@ class ClipPocketApp:
         self.main_widgets["restore_button"].configure(text=self.tr("restore"))
         self.main_widgets["delete_button"].configure(text=self.tr("delete"))
         self.main_widgets["keep_open_check"].configure(text=self.tr("keep_open"))
+        self.main_widgets["settings_button"].configure(text=self.tr("menu_settings"))
         self.item_menu.entryconfigure(0, label=self.tr("restore"))
         self.item_menu.entryconfigure(1, label=self.tr("delete"))
         self.count_label.configure(text=self.tr("count", count=len(self.history.items)))
