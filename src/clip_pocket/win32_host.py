@@ -175,6 +175,10 @@ def next_click_sequence_count(
     return previous_count + 1
 
 
+def tray_event_from_lparam(lparam: int) -> int:
+    return int(lparam) & 0xFFFF
+
+
 class SingleInstance:
     ERROR_ALREADY_EXISTS = 183
 
@@ -207,6 +211,7 @@ class SingleInstance:
 class WindowsHost:
     WM_NULL = 0x0000
     WM_DESTROY = 0x0002
+    WM_CONTEXTMENU = 0x007B
     WM_RBUTTONUP = 0x0205
     WM_LBUTTONUP = 0x0202
     WM_LBUTTONDBLCLK = 0x0203
@@ -221,6 +226,8 @@ class WindowsHost:
     WM_SHOW_REQUEST = WM_APP + 2
     WM_OPTIONS_CHANGED = WM_APP + 3
     WM_CLIPBOARDUPDATE = 0x031D
+    NIN_SELECT = WM_USER
+    NIN_KEYSELECT = WM_USER + 1
 
     HC_ACTION = 0
     WH_MOUSE_LL = 14
@@ -467,14 +474,11 @@ class WindowsHost:
             return 0
 
         if message == self.WM_TRAYICON:
-            tray_event = int(lparam)
-            if tray_event == self.WM_LBUTTONUP:
+            tray_event = tray_event_from_lparam(lparam)
+            if tray_event in (self.WM_LBUTTONUP, self.WM_LBUTTONDBLCLK, self.NIN_SELECT):
                 self.emit(self._show_event_at_cursor())
                 return 0
-            if tray_event == self.WM_LBUTTONDBLCLK:
-                self.emit(self._show_event_at_cursor())
-                return 0
-            if tray_event == self.WM_RBUTTONUP:
+            if tray_event in (self.WM_RBUTTONUP, self.WM_CONTEXTMENU, self.NIN_KEYSELECT):
                 self._show_tray_menu(hwnd)
                 return 0
 
