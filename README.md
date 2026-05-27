@@ -35,7 +35,8 @@ The experimental right-click triple-click gesture is disabled by default. Enable
 - Duplicate copies are refreshed instead of added again
 - Delete unwanted items with `Delete`, the delete button, or the item context menu
 - Auto-hide window behavior with a pin option
-- Settings from the notification-area icon
+- Settings from the notification-area icon or the main window
+- Temporary pause/resume from the notification-area icon
 - English UI by default, with Japanese available in settings
 - Configurable retention period, including unlimited retention while the app is running
 - Configurable maximum item count
@@ -48,7 +49,9 @@ The one-folder build contains `ClipPocket.exe` and its runtime files. Keep the f
 
 ## Settings
 
-Right-click the notification-area icon and choose `Settings`.
+Right-click the notification-area icon and choose `Settings`. You can also open the main window and choose `Settings`.
+
+Settings are applied together when you choose `Apply`. Closing the settings window without applying leaves the current settings unchanged.
 
 Available settings:
 
@@ -58,6 +61,8 @@ Available settings:
 - Language
 - Delete copied items after
 - Maximum copied items
+
+The notification-area menu also includes `Pause monitoring` / `Resume monitoring`. Paused clipboard changes are ignored and are not added later when monitoring resumes.
 
 ## Build from Source
 
@@ -129,6 +134,7 @@ Clip Pocket keeps the Tkinter UI and Win32 integration separate. Windows message
 - No network access is used by the app.
 - No clipboard contents are written to disk.
 - The app does not automatically paste into other applications.
+- Very large copied text is ignored, and the in-memory history has a total text-size limit.
 - The Ctrl double-tap shortcut uses a low-level keyboard hook.
 - The right-click triple-click gesture uses a low-level mouse hook only when enabled.
 

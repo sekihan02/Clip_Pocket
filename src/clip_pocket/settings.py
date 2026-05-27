@@ -22,6 +22,12 @@ def normalize_max_items(value: object) -> int:
     return min(max(number, MIN_MAX_ITEMS), MAX_MAX_ITEMS)
 
 
+def normalize_bool(value: object, default: bool) -> bool:
+    if isinstance(value, bool):
+        return value
+    return default
+
+
 def normalize_retention_seconds(value: object) -> int | None:
     if value is None:
         return None
@@ -30,7 +36,7 @@ def normalize_retention_seconds(value: object) -> int | None:
     except (TypeError, ValueError):
         return RETENTION_SECONDS
     if number <= 0:
-        return None
+        return RETENTION_SECONDS
     return number
 
 
@@ -46,8 +52,14 @@ class AppSettings:
     def from_mapping(cls, value: dict[str, Any]) -> AppSettings:
         return cls(
             language=normalize_language(str(value.get("language", "en"))),
-            ctrl_double_tap_enabled=bool(value.get("ctrl_double_tap_enabled", True)),
-            right_triple_click_enabled=bool(value.get("right_triple_click_enabled", False)),
+            ctrl_double_tap_enabled=normalize_bool(
+                value.get("ctrl_double_tap_enabled"),
+                True,
+            ),
+            right_triple_click_enabled=normalize_bool(
+                value.get("right_triple_click_enabled"),
+                False,
+            ),
             retention_seconds=normalize_retention_seconds(
                 value.get("retention_seconds", RETENTION_SECONDS)
             ),
@@ -78,5 +90,8 @@ def load_settings(path: Path | None = None) -> AppSettings:
 def save_settings(settings: AppSettings, path: Path | None = None) -> None:
     target = path or settings_path()
     target.parent.mkdir(parents=True, exist_ok=True)
-    with target.open("w", encoding="utf-8") as file:
+    temporary = target.with_name(f"{target.name}.tmp")
+    with temporary.open("w", encoding="utf-8") as file:
         json.dump(asdict(settings), file, ensure_ascii=False, indent=2)
+        file.write("\n")
+    temporary.replace(target)

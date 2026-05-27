@@ -1,5 +1,6 @@
 import tempfile
 import unittest
+import json
 from pathlib import Path
 
 from clip_pocket.settings import AppSettings, load_settings, save_settings
@@ -36,6 +37,41 @@ class SettingsTest(unittest.TestCase):
         self.assertTrue(settings.right_triple_click_enabled)
         self.assertIsNone(settings.retention_seconds)
         self.assertEqual(settings.max_items, 250)
+
+    def test_load_settings_ignores_non_bool_values(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "settings.json"
+            path.write_text(
+                json.dumps(
+                    {
+                        "ctrl_double_tap_enabled": "false",
+                        "right_triple_click_enabled": "true",
+                    }
+                ),
+                encoding="utf-8",
+            )
+            settings = load_settings(path)
+
+        self.assertTrue(settings.ctrl_double_tap_enabled)
+        self.assertFalse(settings.right_triple_click_enabled)
+
+    def test_load_settings_uses_default_for_non_positive_retention(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "settings.json"
+            path.write_text(json.dumps({"retention_seconds": -1}), encoding="utf-8")
+            settings = load_settings(path)
+
+        self.assertEqual(settings.retention_seconds, 24 * 60 * 60)
+
+    def test_save_settings_replaces_existing_file(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "settings.json"
+            path.write_text("{broken", encoding="utf-8")
+
+            save_settings(AppSettings(language="ja"), path)
+
+            self.assertFalse(path.with_name("settings.json.tmp").exists())
+            self.assertEqual(load_settings(path).language, "ja")
 
 
 if __name__ == "__main__":

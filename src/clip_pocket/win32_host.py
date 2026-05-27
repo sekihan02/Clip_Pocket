@@ -23,6 +23,7 @@ class WindowsEventType(Enum):
     CLIPBOARD_CHANGED = auto()
     SHOW_WINDOW = auto()
     OPEN_SETTINGS = auto()
+    TOGGLE_PAUSE = auto()
     EXIT_REQUESTED = auto()
     WARNING = auto()
 
@@ -257,7 +258,8 @@ class WindowsHost:
 
     MENU_OPEN = 1
     MENU_SETTINGS = 2
-    MENU_EXIT = 3
+    MENU_PAUSE = 3
+    MENU_EXIT = 4
 
     def __init__(
         self,
@@ -280,6 +282,7 @@ class WindowsHost:
         self.ctrl_double_tap_enabled = ctrl_double_tap_enabled
         self.right_triple_click_enabled = right_triple_click_enabled
         self.language = normalize_language(language)
+        self.paused = False
         self.icon_path = icon_path
         self.tray_icon_handle: int | None = None
         self.ctrl_is_down = False
@@ -528,6 +531,9 @@ class WindowsHost:
     def set_language(self, language: str) -> None:
         self.language = normalize_language(language)
 
+    def set_paused(self, paused: bool) -> None:
+        self.paused = paused
+
     def _sync_hooks(self) -> None:
         if self.ctrl_double_tap_enabled and not self.keyboard_hook_registered:
             self._register_keyboard_hook()
@@ -724,6 +730,8 @@ class WindowsHost:
             self.MENU_SETTINGS,
             self.tr("menu_settings"),
         )
+        pause_label = self.tr("menu_resume") if self.paused else self.tr("menu_pause")
+        self.user32.AppendMenuW(menu, self.MF_STRING, self.MENU_PAUSE, pause_label)
         self.user32.AppendMenuW(menu, self.MF_SEPARATOR, 0, None)
         self.user32.AppendMenuW(menu, self.MF_STRING, self.MENU_EXIT, self.tr("menu_exit"))
 
@@ -746,6 +754,8 @@ class WindowsHost:
             self.emit(self._show_event_at_cursor())
         elif command == self.MENU_SETTINGS:
             self.emit(WindowsEvent(WindowsEventType.OPEN_SETTINGS))
+        elif command == self.MENU_PAUSE:
+            self.emit(WindowsEvent(WindowsEventType.TOGGLE_PAUSE))
         elif command == self.MENU_EXIT:
             self.emit(WindowsEvent(WindowsEventType.EXIT_REQUESTED))
 

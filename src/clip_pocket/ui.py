@@ -9,9 +9,9 @@ from clip_pocket.constants import (
     APP_NAME,
     AUTO_HIDE_MARGIN_PX,
     CLIPBOARD_RETRY_DELAYS_MS,
-    MAX_ITEMS,
     MAX_PREVIEW_LENGTH,
     MAX_TEXT_LENGTH,
+    MAX_TOTAL_TEXT_LENGTH,
     MIN_TEXT_LENGTH,
     RETENTION_SECONDS,
     WINDOW_MIN_SIZE,
@@ -29,7 +29,7 @@ from clip_pocket.i18n import (
     text,
 )
 from clip_pocket.resources import app_icon_path
-from clip_pocket.settings import load_settings, save_settings
+from clip_pocket.settings import load_settings, normalize_max_items, save_settings
 from clip_pocket.startup import is_startup_enabled, set_startup_enabled
 from clip_pocket.win32_host import WindowsEvent, WindowsEventType, WindowsHost
 
@@ -54,10 +54,12 @@ class ClipPocketApp:
             min_text_length=MIN_TEXT_LENGTH,
             max_items=self.settings.max_items,
             max_text_length=MAX_TEXT_LENGTH,
+            max_total_text_length=MAX_TOTAL_TEXT_LENGTH,
         )
         self.history.retention_seconds = self.settings.retention_seconds
         self.events: queue.SimpleQueue[WindowsEvent] = queue.SimpleQueue()
         self.last_seen_clipboard_text = self._get_clipboard_text()
+        self.capture_paused = False
         self.is_exiting = False
         self.main_widgets: dict[str, tk.Misc] = {}
         self.startup_enabled_var = tk.BooleanVar(value=is_startup_enabled())
@@ -219,6 +221,7 @@ class ClipPocketApp:
         self.settings_widgets["startup_check"].configure(text=self.tr("startup"))
         self.settings_widgets["ctrl_check"].configure(text=self.tr("ctrl_double_tap"))
         self.settings_widgets["right_check"].configure(text=self.tr("right_triple_click"))
+        self.settings_widgets["right_hint"].configure(text=self.tr("right_triple_click_hint"))
         self.settings_widgets["retention_label"].configure(text=self.tr("retention"))
         self.settings_widgets["max_items_label"].configure(text=self.tr("max_items"))
         self.settings_widgets["apply_button"].configure(text=self.tr("apply"))
@@ -248,15 +251,26 @@ class ClipPocketApp:
             self.show_window(event.x, event.y)
         elif event.type is WindowsEventType.OPEN_SETTINGS:
             self.show_settings_window()
+        elif event.type is WindowsEventType.TOGGLE_PAUSE:
+            self._toggle_capture_paused()
         elif event.type is WindowsEventType.EXIT_REQUESTED:
             self.exit_app()
         elif event.type is WindowsEventType.WARNING:
             self.status_var.set(event.message)
+            self.show_window()
 
     def capture_clipboard_text(self) -> None:
+        if self.capture_paused:
+            text = self._get_clipboard_text()
+            if text is not None:
+                self.last_seen_clipboard_text = text
+            return
         self._capture_clipboard_text_with_retries(0)
 
     def _capture_clipboard_text_with_retries(self, retry_index: int) -> None:
+        if self.capture_paused:
+            return
+
         text = self._get_clipboard_text()
         if text is None:
             if retry_index < len(CLIPBOARD_RETRY_DELAYS_MS):
@@ -320,20 +334,6 @@ class ClipPocketApp:
         self._refresh_list()
         self.status_var.set(self.tr("status_deleted"))
 
-    def _toggle_startup(self) -> None:
-        enabled = self.startup_enabled_var.get()
-        try:
-            set_startup_enabled(enabled)
-        except OSError:
-            self.startup_enabled_var.set(not enabled)
-            self.status_var.set(self.tr("status_startup_failed"))
-            return
-
-        if enabled:
-            self.status_var.set(self.tr("status_startup_enabled"))
-        else:
-            self.status_var.set(self.tr("status_startup_disabled"))
-
     def _toggle_keep_open(self) -> None:
         if self.keep_open_var.get():
             self._cancel_auto_hide_watch()
@@ -341,6 +341,18 @@ class ClipPocketApp:
         elif self.root.state() == "normal":
             self.status_var.set(self.tr("status_unpinned"))
             self._start_auto_hide_watch()
+
+    def _toggle_capture_paused(self) -> None:
+        self.capture_paused = not self.capture_paused
+        self.host.set_paused(self.capture_paused)
+        if self.capture_paused:
+            text = self._get_clipboard_text()
+            if text is not None:
+                self.last_seen_clipboard_text = text
+            self.status_var.set(self.tr("status_paused"))
+        else:
+            self.last_seen_clipboard_text = self._get_clipboard_text()
+            self.status_var.set(self.tr("status_resumed"))
 
     def show_settings_window(self) -> None:
         if self.settings_window is not None and self.settings_window.winfo_exists():
@@ -399,13 +411,11 @@ class ClipPocketApp:
             width=18,
         )
         language_combo.grid(row=1, column=1, sticky="ew", pady=4)
-        language_combo.bind("<<ComboboxSelected>>", self._change_language)
         self.settings_widgets["language_combo"] = language_combo
 
         startup_check = ttk.Checkbutton(
             frame,
             variable=self.startup_enabled_var,
-            command=self._toggle_startup,
         )
         startup_check.grid(row=2, column=0, columnspan=2, sticky="w", pady=4)
         self.settings_widgets["startup_check"] = startup_check
@@ -413,7 +423,6 @@ class ClipPocketApp:
         ctrl_check = ttk.Checkbutton(
             frame,
             variable=self.ctrl_double_tap_var,
-            command=self._toggle_ctrl_double_tap,
         )
         ctrl_check.grid(row=3, column=0, columnspan=2, sticky="w", pady=4)
         self.settings_widgets["ctrl_check"] = ctrl_check
@@ -421,13 +430,16 @@ class ClipPocketApp:
         right_check = ttk.Checkbutton(
             frame,
             variable=self.right_triple_click_var,
-            command=self._toggle_right_triple_click,
         )
         right_check.grid(row=4, column=0, columnspan=2, sticky="w", pady=4)
         self.settings_widgets["right_check"] = right_check
 
+        right_hint = ttk.Label(frame, foreground="#666666", wraplength=360)
+        right_hint.grid(row=5, column=0, columnspan=2, sticky="w", pady=(0, 6))
+        self.settings_widgets["right_hint"] = right_hint
+
         retention_label_widget = ttk.Label(frame)
-        retention_label_widget.grid(row=5, column=0, sticky="w", pady=(10, 4), padx=(0, 12))
+        retention_label_widget.grid(row=6, column=0, sticky="w", pady=(10, 4), padx=(0, 12))
         self.settings_widgets["retention_label"] = retention_label_widget
 
         retention_combo = ttk.Combobox(
@@ -437,11 +449,11 @@ class ClipPocketApp:
             state="readonly",
             width=18,
         )
-        retention_combo.grid(row=5, column=1, sticky="ew", pady=(10, 4))
+        retention_combo.grid(row=6, column=1, sticky="ew", pady=(10, 4))
         self.settings_widgets["retention_combo"] = retention_combo
 
         max_items_label = ttk.Label(frame)
-        max_items_label.grid(row=6, column=0, sticky="w", pady=4, padx=(0, 12))
+        max_items_label.grid(row=7, column=0, sticky="w", pady=4, padx=(0, 12))
         self.settings_widgets["max_items_label"] = max_items_label
 
         max_items_spinbox = tk.Spinbox(
@@ -452,11 +464,11 @@ class ClipPocketApp:
             textvariable=self.max_items_var,
             width=8,
         )
-        max_items_spinbox.grid(row=6, column=1, sticky="w", pady=4)
+        max_items_spinbox.grid(row=7, column=1, sticky="w", pady=4)
         self.settings_widgets["max_items_spinbox"] = max_items_spinbox
 
         button_row = ttk.Frame(frame)
-        button_row.grid(row=7, column=0, columnspan=2, sticky="ew", pady=(14, 0))
+        button_row.grid(row=8, column=0, columnspan=2, sticky="ew", pady=(14, 0))
         button_row.columnconfigure(0, weight=1)
 
         apply_button = ttk.Button(
@@ -483,11 +495,7 @@ class ClipPocketApp:
         self._apply_settings_language()
 
         window.update_idletasks()
-        width = window.winfo_width()
-        height = window.winfo_height()
-        left = self.root.winfo_pointerx() - 24
-        top = self.root.winfo_pointery() - 24
-        window.geometry(f"{width}x{height}+{left}+{top}")
+        self._position_settings_window(window)
         window.lift()
         window.focus_force()
 
@@ -496,58 +504,67 @@ class ClipPocketApp:
             self.settings_window.destroy()
             self.settings_window = None
 
-    def _toggle_ctrl_double_tap(self) -> None:
-        self.settings.ctrl_double_tap_enabled = self.ctrl_double_tap_var.get()
-        self._save_shortcut_settings()
-
-    def _toggle_right_triple_click(self) -> None:
-        self.settings.right_triple_click_enabled = self.right_triple_click_var.get()
-        self._save_shortcut_settings()
-
-    def _change_language(self, _event: tk.Event | None = None) -> None:
-        selected = self.language_var.get()
-        language = "ja" if selected == LANGUAGE_NAMES["ja"] else "en"
-        self.settings.language = language
-        self.language = language
-        saved = self._save_settings()
-        self.host.set_language(language)
-        self._apply_language()
-        if saved:
-            self.status_var.set(self.tr("status_settings_saved"))
+    def _position_settings_window(self, window: tk.Toplevel) -> None:
+        width = window.winfo_width()
+        height = window.winfo_height()
+        screen_width = window.winfo_screenwidth()
+        screen_height = window.winfo_screenheight()
+        left = self.root.winfo_pointerx() - 24
+        top = self.root.winfo_pointery() - 24
+        left = min(max(0, left), max(0, screen_width - width))
+        top = min(max(0, top), max(0, screen_height - height))
+        window.geometry(f"{width}x{height}+{left}+{top}")
 
     def _apply_settings_from_window(self) -> None:
+        selected_language = self.language_var.get()
+        language = "ja" if selected_language == LANGUAGE_NAMES["ja"] else "en"
+        startup_enabled = self.startup_enabled_var.get()
+        ctrl_double_tap_enabled = self.ctrl_double_tap_var.get()
+        right_triple_click_enabled = self.right_triple_click_var.get()
         retention_key = retention_key_from_label(self.language, self.retention_var.get())
         max_items = self._parse_max_items()
 
+        try:
+            set_startup_enabled(startup_enabled)
+        except OSError:
+            self.startup_enabled_var.set(is_startup_enabled())
+            self.status_var.set(self.tr("status_startup_failed"))
+            return
+
+        self.settings.language = language
+        self.settings.ctrl_double_tap_enabled = ctrl_double_tap_enabled
+        self.settings.right_triple_click_enabled = right_triple_click_enabled
         self.settings.retention_seconds = retention_seconds_from_key(retention_key)
         self.settings.max_items = max_items
+        self.language = language
         self.history.retention_seconds = self.settings.retention_seconds
         self.history.max_items = max_items
         changed = self.history.enforce_max_items()
+        changed = self.history.enforce_total_text_length() or changed
         changed = self.history.prune(time.time()) or changed
         if changed:
             self._refresh_list()
 
-        if self._save_settings():
-            self.status_var.set(self.tr("status_settings_saved"))
+        if not self._save_settings():
+            return
+
+        self.host.set_language(language)
+        self.host.set_shortcut_options(
+            ctrl_double_tap_enabled=ctrl_double_tap_enabled,
+            right_triple_click_enabled=right_triple_click_enabled,
+        )
+        self._apply_language()
+        self.status_var.set(self.tr("status_settings_saved"))
+        self._close_settings_window()
 
     def _parse_max_items(self) -> int:
         try:
             value = int(self.max_items_var.get())
         except ValueError:
             value = self.settings.max_items
-        value = min(max(value, 10), 1000)
+        value = normalize_max_items(value)
         self.max_items_var.set(str(value))
         return value
-
-    def _save_shortcut_settings(self) -> None:
-        if not self._save_settings():
-            return
-        self.host.set_shortcut_options(
-            ctrl_double_tap_enabled=self.settings.ctrl_double_tap_enabled,
-            right_triple_click_enabled=self.settings.right_triple_click_enabled,
-        )
-        self.status_var.set(self.tr("status_settings_saved"))
 
     def _save_settings(self) -> bool:
         try:
@@ -587,7 +604,8 @@ class ClipPocketApp:
 
     @staticmethod
     def _preview(text: str) -> str:
-        single_line = " ".join(text.splitlines())
+        source = text[: MAX_PREVIEW_LENGTH * 4]
+        single_line = " ".join(source.splitlines())
         if len(single_line) <= MAX_PREVIEW_LENGTH:
             return single_line
         return f"{single_line[: MAX_PREVIEW_LENGTH - 3]}..."

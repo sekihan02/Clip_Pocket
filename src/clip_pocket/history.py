@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 from dataclasses import dataclass
 from enum import Enum, auto
 from math import inf
@@ -14,6 +15,7 @@ class HistoryChange(Enum):
 @dataclass
 class ClipboardItem:
     text: str
+    text_hash: str
     created_at: float
     updated_at: float
 
@@ -30,11 +32,13 @@ class ClipboardHistory:
         min_text_length: int,
         max_items: int,
         max_text_length: int,
+        max_total_text_length: int,
     ) -> None:
         self.retention_seconds = retention_seconds
         self.min_text_length = min_text_length
         self.max_items = max_items
         self.max_text_length = max_text_length
+        self.max_total_text_length = max_total_text_length
         self.items: list[ClipboardItem] = []
 
     def add_or_refresh(self, text: str, now: float) -> HistoryChange:
@@ -42,16 +46,28 @@ class ClipboardHistory:
             return HistoryChange.IGNORED
         if len(text) > self.max_text_length:
             return HistoryChange.IGNORED
+        if len(text) > self.max_total_text_length:
+            return HistoryChange.IGNORED
 
-        duplicate_index = self.find_index(text)
+        text_hash = fingerprint(text)
+        duplicate_index = self.find_index(text, text_hash)
         if duplicate_index is not None:
             self.touch(duplicate_index, now)
             self.prune(now)
             return HistoryChange.REFRESHED
 
-        self.items.insert(0, ClipboardItem(text=text, created_at=now, updated_at=now))
+        self.items.insert(
+            0,
+            ClipboardItem(
+                text=text,
+                text_hash=text_hash,
+                created_at=now,
+                updated_at=now,
+            ),
+        )
         self.prune(now)
         self.enforce_max_items()
+        self.enforce_total_text_length()
         return HistoryChange.ADDED
 
     def touch(self, index: int, now: float) -> int:
@@ -82,9 +98,21 @@ class ClipboardHistory:
         del self.items[self.max_items :]
         return len(self.items) != before
 
-    def find_index(self, text: str) -> int | None:
+    def enforce_total_text_length(self) -> bool:
+        before = len(self.items)
+        total = 0
+        kept: list[ClipboardItem] = []
+        for item in self.items:
+            total += len(item.text)
+            if total <= self.max_total_text_length:
+                kept.append(item)
+        self.items = kept
+        return len(self.items) != before
+
+    def find_index(self, text: str, text_hash: str | None = None) -> int | None:
+        candidate_hash = text_hash or fingerprint(text)
         for index, item in enumerate(self.items):
-            if item.text == text:
+            if item.text_hash == candidate_hash and item.text == text:
                 return index
         return None
 
@@ -93,3 +121,7 @@ class ClipboardHistory:
             return None
         seconds = max(0, int(item.expires_at(self.retention_seconds) - now))
         return seconds // 60
+
+
+def fingerprint(text: str) -> str:
+    return hashlib.blake2b(text.encode("utf-8"), digest_size=16).hexdigest()

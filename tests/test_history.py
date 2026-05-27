@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import unittest
 
-from clip_pocket.history import ClipboardHistory, HistoryChange
+from clip_pocket.history import ClipboardHistory, HistoryChange, fingerprint
 
 
 def make_history(
@@ -10,12 +10,14 @@ def make_history(
     min_text_length: int = 2,
     max_items: int = 100,
     max_text_length: int = 100_000,
+    max_total_text_length: int = 5_000_000,
 ) -> ClipboardHistory:
     return ClipboardHistory(
         retention_seconds=retention_seconds,
         min_text_length=min_text_length,
         max_items=max_items,
         max_text_length=max_text_length,
+        max_total_text_length=max_total_text_length,
     )
 
 
@@ -46,6 +48,7 @@ class ClipboardHistoryTest(unittest.TestCase):
         self.assertEqual([item.text for item in history.items], ["りんご", "みかん"])
         self.assertEqual(len(history.items), 2)
         self.assertEqual(history.items[0].updated_at, 10)
+        self.assertEqual(history.items[0].text_hash, fingerprint("りんご"))
 
     def test_delete_selected_indices(self) -> None:
         history = make_history()
@@ -100,6 +103,15 @@ class ClipboardHistoryTest(unittest.TestCase):
         history.add_or_refresh("three", 2)
 
         self.assertEqual([item.text for item in history.items], ["three", "two"])
+
+    def test_keeps_within_total_text_length_limit(self) -> None:
+        history = make_history(max_total_text_length=8)
+
+        history.add_or_refresh("abcd", 0)
+        history.add_or_refresh("efgh", 1)
+        history.add_or_refresh("ijkl", 2)
+
+        self.assertEqual([item.text for item in history.items], ["ijkl", "efgh"])
 
 
 if __name__ == "__main__":
