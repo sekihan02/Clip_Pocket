@@ -294,28 +294,16 @@ class ClipPocketApp:
 
     def _build_ui(self) -> None:
         self.root.columnconfigure(0, weight=1)
-        self.root.rowconfigure(1, weight=1)
+        self.root.rowconfigure(0, weight=1)
 
-        title_label = ttk.Label(
-            self.root,
-            text=APP_NAME,
-            font=("Yu Gothic UI", 18, "bold"),
-        )
-        title_label.grid(row=0, column=0, sticky="w", padx=18, pady=(16, 8))
-        self.main_widgets["title"] = title_label
-
-        body = ttk.Frame(self.root, padding=(18, 0, 18, 14))
-        body.grid(row=1, column=0, sticky="nsew")
+        body = ttk.Frame(self.root, padding=(18, 14, 18, 14))
+        body.grid(row=0, column=0, sticky="nsew")
         body.columnconfigure(0, weight=1)
-        body.rowconfigure(1, weight=1)
+        body.rowconfigure(0, weight=1)
         self.main_widgets["body"] = body
 
-        heading = ttk.Label(body, font=("Yu Gothic UI", 11, "bold"))
-        heading.grid(row=0, column=0, sticky="w", pady=(0, 6))
-        self.main_widgets["heading"] = heading
-
         list_frame = ttk.Frame(body)
-        list_frame.grid(row=1, column=0, sticky="nsew")
+        list_frame.grid(row=0, column=0, sticky="nsew")
         list_frame.columnconfigure(0, weight=1)
         list_frame.rowconfigure(0, weight=1)
         self.main_widgets["list_frame"] = list_frame
@@ -338,7 +326,7 @@ class ClipPocketApp:
         self.main_widgets["history_scrollbar"] = scrollbar
 
         button_row = ttk.Frame(body)
-        button_row.grid(row=2, column=0, sticky="ew", pady=(10, 0))
+        button_row.grid(row=1, column=0, sticky="ew", pady=(10, 0))
         button_row.columnconfigure(4, weight=1)
         self.main_widgets["button_row"] = button_row
 
@@ -380,11 +368,11 @@ class ClipPocketApp:
 
         self.status_var = tk.StringVar(value="")
         status = ttk.Label(body, textvariable=self.status_var, foreground="#555555")
-        status.grid(row=3, column=0, sticky="w", pady=(8, 0))
+        status.grid(row=2, column=0, sticky="w", pady=(8, 0))
         self.main_widgets["status"] = status
 
         size_grip = ttk.Sizegrip(body)
-        size_grip.grid(row=3, column=0, sticky="se", pady=(8, 0))
+        size_grip.grid(row=2, column=0, sticky="se", pady=(8, 0))
         self.main_widgets["size_grip"] = size_grip
 
         self.item_menu = tk.Menu(self.root, tearoff=False)
@@ -402,7 +390,6 @@ class ClipPocketApp:
 
     def _apply_language(self) -> None:
         self.root.title(APP_NAME)
-        self.main_widgets["heading"].configure(text=self.tr("copied_items"))
         self.main_widgets["restore_button"].configure(text=self.tr("restore"))
         self.main_widgets["delete_button"].configure(text=self.tr("delete"))
         self.main_widgets["keep_open_check"].configure(text=self.tr("keep_open"))
