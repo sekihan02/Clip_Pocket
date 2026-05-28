@@ -4,11 +4,12 @@ from clip_pocket.constants import MAX_PREVIEW_LENGTH
 from clip_pocket.settings import AppSettings
 
 try:
-    from clip_pocket.ui import ClipPocketApp
+    from clip_pocket.ui import ClipPocketApp, scrollbar_thumb_bounds
 except ModuleNotFoundError as error:
     if error.name != "tkinter":
         raise
     ClipPocketApp = None  # type: ignore[assignment]
+    scrollbar_thumb_bounds = None  # type: ignore[assignment]
 
 
 @unittest.skipIf(ClipPocketApp is None, "tkinter is not available")
@@ -59,6 +60,17 @@ class UiHelpersTest(unittest.TestCase):
     def test_point_moved_uses_tolerance(self) -> None:
         self.assertFalse(ClipPocketApp._point_moved((100, 100), (102, 103), 3))
         self.assertTrue(ClipPocketApp._point_moved((100, 100), (104, 103), 3))
+
+    def test_scrollbar_thumb_bounds_use_visible_fraction(self) -> None:
+        top, bottom = scrollbar_thumb_bounds(0.25, 0.5, 200)
+
+        self.assertEqual((top, bottom), (51, 99))
+
+    def test_scrollbar_thumb_bounds_keep_minimum_size(self) -> None:
+        top, bottom = scrollbar_thumb_bounds(0.9, 0.91, 200)
+
+        self.assertEqual(bottom - top, 32)
+        self.assertLessEqual(bottom, 197)
 
     def test_position_uses_saved_window_size(self) -> None:
         class FakeRoot:

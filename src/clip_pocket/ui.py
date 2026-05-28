@@ -80,6 +80,136 @@ THEME_PALETTES = {
 }
 
 
+def scrollbar_thumb_bounds(
+    first: float,
+    last: float,
+    length: int,
+    *,
+    padding: int = 3,
+    minimum_thumb_length: int = 32,
+) -> tuple[int, int]:
+    track_length = max(0, length - (padding * 2))
+    if track_length <= 0:
+        return padding, padding
+
+    first = min(max(float(first), 0.0), 1.0)
+    last = min(max(float(last), first), 1.0)
+    thumb_length = max(minimum_thumb_length, round((last - first) * track_length))
+    thumb_length = min(thumb_length, track_length)
+    max_top = padding + track_length - thumb_length
+    top = padding + round(first * track_length)
+    top = min(max(padding, top), max_top)
+    return top, top + thumb_length
+
+
+class ModernScrollbar(tk.Canvas):
+    def __init__(self, master: tk.Misc, command: object) -> None:
+        super().__init__(
+            master,
+            width=14,
+            borderwidth=0,
+            highlightthickness=0,
+            takefocus=0,
+        )
+        self.command = command
+        self.first = 0.0
+        self.last = 1.0
+        self.track_color = "#f7f7f7"
+        self.thumb_color = "#9ca3af"
+        self.active_thumb_color = "#6b7280"
+        self.is_active = False
+        self.drag_offset = 0
+        self.bind("<Configure>", self._redraw)
+        self.bind("<Enter>", self._set_active)
+        self.bind("<Leave>", self._clear_active)
+        self.bind("<Button-1>", self._handle_press)
+        self.bind("<B1-Motion>", self._handle_drag)
+        self.bind("<ButtonRelease-1>", self._clear_active)
+        self.bind("<MouseWheel>", self._handle_mouse_wheel)
+
+    def set(self, first: object, last: object) -> None:
+        try:
+            self.first = float(first)
+            self.last = float(last)
+        except (TypeError, ValueError):
+            self.first = 0.0
+            self.last = 1.0
+        self._redraw()
+
+    def configure_colors(
+        self,
+        *,
+        track: str,
+        thumb: str,
+        active_thumb: str,
+    ) -> None:
+        self.track_color = track
+        self.thumb_color = thumb
+        self.active_thumb_color = active_thumb
+        self.configure(background=track)
+        self._redraw()
+
+    def _set_active(self, _event: tk.Event) -> None:
+        self.is_active = True
+        self._redraw()
+
+    def _clear_active(self, _event: tk.Event) -> None:
+        self.is_active = False
+        self.drag_offset = 0
+        self._redraw()
+
+    def _handle_press(self, event: tk.Event) -> str:
+        self.is_active = True
+        top, bottom = self._thumb_bounds()
+        if top <= event.y <= bottom:
+            self.drag_offset = event.y - top
+        else:
+            self.drag_offset = max(0, (bottom - top) // 2)
+            self._move_thumb_to(event.y)
+        self._redraw()
+        return "break"
+
+    def _handle_drag(self, event: tk.Event) -> str:
+        self._move_thumb_to(event.y)
+        return "break"
+
+    def _handle_mouse_wheel(self, event: tk.Event) -> str:
+        units = -1 if event.delta > 0 else 1
+        self.command("scroll", units, "units")
+        return "break"
+
+    def _move_thumb_to(self, y: int) -> None:
+        top, bottom = self._thumb_bounds()
+        thumb_length = bottom - top
+        track_length = max(1, self.winfo_height() - 6)
+        minimum_top = 3
+        maximum_top = minimum_top + track_length - thumb_length
+        new_top = min(max(minimum_top, y - self.drag_offset), maximum_top)
+        self.command("moveto", (new_top - minimum_top) / track_length)
+
+    def _thumb_bounds(self) -> tuple[int, int]:
+        return scrollbar_thumb_bounds(self.first, self.last, self.winfo_height())
+
+    def _redraw(self, _event: tk.Event | None = None) -> None:
+        self.delete("all")
+        width = max(1, self.winfo_width())
+        height = max(1, self.winfo_height())
+        self.create_rectangle(0, 0, width, height, fill=self.track_color, outline="")
+        if self.first <= 0.0 and self.last >= 1.0:
+            return
+        top, bottom = self._thumb_bounds()
+        color = self.active_thumb_color if self.is_active else self.thumb_color
+        self.create_line(
+            width // 2,
+            top,
+            width // 2,
+            bottom,
+            width=8,
+            fill=color,
+            capstyle=tk.ROUND,
+        )
+
+
 class ClipPocketApp:
     def __init__(self, show_on_start: bool = False) -> None:
         self.root = tk.Tk()
@@ -202,9 +332,10 @@ class ClipPocketApp:
         self.listbox.bind("<Delete>", self.delete_selected_items)
         self.listbox.bind("<Button-3>", self._show_item_context_menu)
 
-        scrollbar = ttk.Scrollbar(list_frame, orient=tk.VERTICAL, command=self.listbox.yview)
+        scrollbar = ModernScrollbar(list_frame, command=self.listbox.yview)
         scrollbar.grid(row=0, column=1, sticky="ns")
         self.listbox.configure(yscrollcommand=scrollbar.set)
+        self.main_widgets["history_scrollbar"] = scrollbar
 
         button_row = ttk.Frame(body)
         button_row.grid(row=2, column=0, sticky="ew", pady=(10, 0))
@@ -917,6 +1048,13 @@ class ClipPocketApp:
             highlightbackground=palette["border"],
             highlightcolor=palette["selection"],
         )
+        history_scrollbar = self.main_widgets.get("history_scrollbar")
+        if isinstance(history_scrollbar, ModernScrollbar):
+            history_scrollbar.configure_colors(
+                track=palette["surface"],
+                thumb=palette["muted"],
+                active_thumb=palette["selection"],
+            )
         self.item_menu.configure(
             background=palette["surface"],
             foreground=palette["foreground"],
