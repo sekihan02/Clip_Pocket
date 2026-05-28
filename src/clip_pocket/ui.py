@@ -1396,19 +1396,7 @@ class ClipPocketApp:
             return
 
         pointer_x, pointer_y = self._current_pointer_position()
-        left = self.root.winfo_rootx()
-        top = self.root.winfo_rooty()
-        right = left + self.root.winfo_width()
-        bottom = top + self.root.winfo_height()
-        margin = AUTO_HIDE_MARGIN_PX
-
-        pointer_is_outside = (
-            pointer_x < left - margin
-            or pointer_x > right + margin
-            or pointer_y < top - margin
-            or pointer_y > bottom + margin
-        )
-        if pointer_is_outside:
+        if self._pointer_is_outside_auto_hide_bounds(pointer_x, pointer_y):
             if self._pointer_has_not_moved_since_show(pointer_x, pointer_y):
                 self.auto_hide_after_id = self.root.after(
                     AUTO_HIDE_POLL_INTERVAL_MS,
@@ -1422,6 +1410,58 @@ class ClipPocketApp:
         self.auto_hide_after_id = self.root.after(
             AUTO_HIDE_POLL_INTERVAL_MS,
             self._auto_hide_if_pointer_left,
+        )
+
+    def _pointer_is_outside_auto_hide_bounds(self, pointer_x: int, pointer_y: int) -> bool:
+        bounds = self._outer_window_bounds()
+        if bounds is None:
+            bounds = (
+                self.root.winfo_rootx(),
+                self.root.winfo_rooty(),
+                self.root.winfo_width(),
+                self.root.winfo_height(),
+            )
+        return self._point_is_outside_bounds(pointer_x, pointer_y, bounds, AUTO_HIDE_MARGIN_PX)
+
+    def _outer_window_bounds(self) -> tuple[int, int, int, int] | None:
+        try:
+            import ctypes
+            from ctypes import wintypes
+
+            hwnd = int(self.root.winfo_id())
+            user32 = ctypes.windll.user32
+            user32.GetAncestor.argtypes = [wintypes.HWND, wintypes.UINT]
+            user32.GetAncestor.restype = wintypes.HWND
+            user32.GetWindowRect.argtypes = [wintypes.HWND, ctypes.POINTER(wintypes.RECT)]
+            user32.GetWindowRect.restype = wintypes.BOOL
+            root_hwnd = user32.GetAncestor(hwnd, 2) or hwnd
+            rect = wintypes.RECT()
+            if not user32.GetWindowRect(root_hwnd, ctypes.byref(rect)):
+                return None
+        except (AttributeError, OSError, tk.TclError, ValueError):
+            return None
+
+        width = int(rect.right - rect.left)
+        height = int(rect.bottom - rect.top)
+        if width <= 0 or height <= 0:
+            return None
+        return int(rect.left), int(rect.top), width, height
+
+    @staticmethod
+    def _point_is_outside_bounds(
+        pointer_x: int,
+        pointer_y: int,
+        bounds: tuple[int, int, int, int],
+        margin: int,
+    ) -> bool:
+        left, top, width, height = bounds
+        right = left + width
+        bottom = top + height
+        return (
+            pointer_x < left - margin
+            or pointer_x > right + margin
+            or pointer_y < top - margin
+            or pointer_y > bottom + margin
         )
 
     def _current_pointer_position(self) -> tuple[int, int]:

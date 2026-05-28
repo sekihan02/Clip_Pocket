@@ -61,6 +61,14 @@ class UiHelpersTest(unittest.TestCase):
         self.assertFalse(ClipPocketApp._point_moved((100, 100), (102, 103), 3))
         self.assertTrue(ClipPocketApp._point_moved((100, 100), (104, 103), 3))
 
+    def test_auto_hide_bounds_include_margin(self) -> None:
+        bounds = (100, 100, 300, 200)
+
+        self.assertFalse(ClipPocketApp._point_is_outside_bounds(105, 95, bounds, 10))
+        self.assertFalse(ClipPocketApp._point_is_outside_bounds(405, 305, bounds, 10))
+        self.assertTrue(ClipPocketApp._point_is_outside_bounds(105, 89, bounds, 10))
+        self.assertTrue(ClipPocketApp._point_is_outside_bounds(411, 305, bounds, 10))
+
     def test_scrollbar_thumb_bounds_use_visible_fraction(self) -> None:
         top, bottom = scrollbar_thumb_bounds(0.25, 0.5, 200)
 
