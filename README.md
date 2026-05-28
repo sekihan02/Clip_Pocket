@@ -7,7 +7,7 @@
 ![Platform](https://img.shields.io/badge/platform-Windows-0078D4)
 [![Docs](https://img.shields.io/badge/docs-English%20%7C%20日本語-informational)](docs/README.ja.md)
 
-Clip Pocket is a small resident Windows app for keeping copied text temporarily and choosing it again when you want to paste it later.
+Clip Pocket is a resident Windows app for keeping copied text temporarily and choosing it again when you want to paste it later.
 
 Current source version: v0.2.1
 
@@ -21,7 +21,7 @@ Clip Pocket watches text copied to the Windows clipboard and keeps a short in-me
 
 ![Clip Pocket main window](docs/assets/clip-pocket-main.png)
 
-The screenshot shows the black color setting. The default color is white, and both color and opacity can be changed from `Settings`.
+The screenshot shows the default white color setting. Color, opacity, and window size can be changed from `Settings`.
 
 ## Getting Started
 
@@ -199,10 +199,6 @@ src/clip_pocket/
 ```
 
 Clip Pocket keeps the Tkinter UI and Win32 integration separate. Windows messages are received by a hidden Win32 window and forwarded to the UI thread through a queue.
-
-## Project Status
-
-This is an early release. It is intended to be small, inspectable, and conservative rather than feature-complete.
 
 The project name should not be treated as legal or trademark clearance. Please do your own review before redistributing under a different name or brand.
 
