@@ -1,6 +1,12 @@
 import unittest
 
-from clip_pocket.win32_host import is_double_ctrl_tap, next_click_sequence_count, tray_event_from_lparam
+from clip_pocket.win32_host import (
+    is_double_ctrl_tap,
+    is_tray_menu_event,
+    is_tray_open_event,
+    next_click_sequence_count,
+    tray_event_from_lparam,
+)
 
 
 class Win32HostTest(unittest.TestCase):
@@ -32,6 +38,17 @@ class Win32HostTest(unittest.TestCase):
     def test_tray_event_from_lparam_uses_low_word(self) -> None:
         self.assertEqual(tray_event_from_lparam(0x0001_007B), 0x007B)
         self.assertEqual(tray_event_from_lparam(-0xFFFF_FF85), 0x007B)
+
+    def test_tray_left_click_does_not_open_window(self) -> None:
+        self.assertFalse(is_tray_open_event(0x0202))
+        self.assertFalse(is_tray_open_event(0x0400))
+        self.assertTrue(is_tray_open_event(0x0203))
+
+    def test_tray_menu_events(self) -> None:
+        self.assertTrue(is_tray_menu_event(0x0205))
+        self.assertTrue(is_tray_menu_event(0x007B))
+        self.assertTrue(is_tray_menu_event(0x0401))
+        self.assertFalse(is_tray_menu_event(0x0202))
 
 
 if __name__ == "__main__":

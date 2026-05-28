@@ -181,6 +181,18 @@ def tray_event_from_lparam(lparam: int) -> int:
     return int(lparam) & 0xFFFF
 
 
+def is_tray_open_event(tray_event: int) -> bool:
+    return tray_event == WindowsHost.WM_LBUTTONDBLCLK
+
+
+def is_tray_menu_event(tray_event: int) -> bool:
+    return tray_event in (
+        WindowsHost.WM_RBUTTONUP,
+        WindowsHost.WM_CONTEXTMENU,
+        WindowsHost.NIN_KEYSELECT,
+    )
+
+
 class SingleInstance:
     ERROR_ALREADY_EXISTS = 183
 
@@ -490,10 +502,10 @@ class WindowsHost:
 
         if message == self.WM_TRAYICON:
             tray_event = tray_event_from_lparam(lparam)
-            if tray_event in (self.WM_LBUTTONUP, self.WM_LBUTTONDBLCLK, self.NIN_SELECT):
+            if is_tray_open_event(tray_event):
                 self.emit(self._show_event_at_cursor())
                 return 0
-            if tray_event in (self.WM_RBUTTONUP, self.WM_CONTEXTMENU, self.NIN_KEYSELECT):
+            if is_tray_menu_event(tray_event):
                 self._show_tray_menu(hwnd)
                 return 0
 

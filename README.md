@@ -34,7 +34,7 @@ ClipPocket.exe
 The app starts hidden in the notification area. Open the window with:
 
 - Double-tap `Ctrl`
-- Click or double-click the notification-area icon
+- Double-click the notification-area icon
 - Run `ClipPocket.exe` again while Clip Pocket is already running
 
 The experimental right-click triple-click gesture is disabled by default. Enable it from the notification-area icon's settings menu if you want to try it.
@@ -114,7 +114,7 @@ Clip Pocket opens near the pointer and keeps the window inside the screen. If th
 
 ### The app starts but no window appears
 
-Clip Pocket starts hidden in the notification area. Click the notification-area icon, double-tap `Ctrl`, or run `ClipPocket.exe` again.
+Clip Pocket starts hidden in the notification area. Double-click the notification-area icon, double-tap `Ctrl`, or run `ClipPocket.exe` again.
 
 ### Ctrl double-tap does not open the window
 
