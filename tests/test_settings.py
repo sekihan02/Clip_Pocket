@@ -18,6 +18,8 @@ class SettingsTest(unittest.TestCase):
         self.assertEqual(settings.max_items, 100)
         self.assertEqual(settings.color_theme, "light")
         self.assertEqual(settings.window_opacity, 1.0)
+        self.assertEqual(settings.window_width, 560)
+        self.assertEqual(settings.window_height, 360)
 
     def test_save_and_load_settings(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -31,6 +33,8 @@ class SettingsTest(unittest.TestCase):
                     max_items=250,
                     color_theme="dark",
                     window_opacity=0.75,
+                    window_width=640,
+                    window_height=420,
                 ),
                 path,
             )
@@ -43,6 +47,8 @@ class SettingsTest(unittest.TestCase):
         self.assertEqual(settings.max_items, 250)
         self.assertEqual(settings.color_theme, "dark")
         self.assertEqual(settings.window_opacity, 0.75)
+        self.assertEqual(settings.window_width, 640)
+        self.assertEqual(settings.window_height, 420)
 
     def test_load_settings_ignores_non_bool_values(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -113,6 +119,31 @@ class SettingsTest(unittest.TestCase):
         self.assertEqual(high_settings.window_opacity, 1.0)
         self.assertEqual(invalid_settings.window_opacity, 1.0)
         self.assertEqual(minimum_settings.window_opacity, 0.0)
+
+    def test_load_settings_normalizes_window_size(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "settings.json"
+            path.write_text(json.dumps({"window_width": 100, "window_height": 100}), encoding="utf-8")
+            low_settings = load_settings(path)
+
+            path.write_text(
+                json.dumps({"window_width": 5000, "window_height": 5000}),
+                encoding="utf-8",
+            )
+            high_settings = load_settings(path)
+
+            path.write_text(
+                json.dumps({"window_width": "wide", "window_height": "tall"}),
+                encoding="utf-8",
+            )
+            invalid_settings = load_settings(path)
+
+        self.assertEqual(low_settings.window_width, 420)
+        self.assertEqual(low_settings.window_height, 280)
+        self.assertEqual(high_settings.window_width, 1200)
+        self.assertEqual(high_settings.window_height, 900)
+        self.assertEqual(invalid_settings.window_width, 560)
+        self.assertEqual(invalid_settings.window_height, 360)
 
     def test_save_settings_replaces_existing_file(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

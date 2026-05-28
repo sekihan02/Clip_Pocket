@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import replace
 import queue
 import time
 import tkinter as tk
@@ -18,8 +19,8 @@ from clip_pocket.constants import (
     MIN_TEXT_LENGTH,
     RETENTION_SECONDS,
     WINDOW_SCREEN_MARGIN_PX,
+    WINDOW_MAX_SIZE,
     WINDOW_MIN_SIZE,
-    WINDOW_SIZE,
 )
 from clip_pocket.history import ClipboardHistory, ClipboardItem, HistoryChange
 from clip_pocket.i18n import (
@@ -40,6 +41,8 @@ from clip_pocket.settings import (
     AppSettings,
     load_settings,
     normalize_color_theme,
+    normalize_window_height,
+    normalize_window_width,
     normalize_max_items,
     normalize_window_opacity,
     save_settings,
@@ -81,9 +84,11 @@ class ClipPocketApp:
     def __init__(self, show_on_start: bool = False) -> None:
         self.root = tk.Tk()
         self.style = ttk.Style(self.root)
+        self.settings = load_settings()
         self.root.title(APP_NAME)
-        self.root.geometry(WINDOW_SIZE)
+        self.root.geometry(self._settings_window_geometry())
         self.root.minsize(*WINDOW_MIN_SIZE)
+        self.root.maxsize(*WINDOW_MAX_SIZE)
         self.icon_path = app_icon_path()
         if self.icon_path is not None:
             try:
@@ -91,7 +96,6 @@ class ClipPocketApp:
             except tk.TclError:
                 pass
 
-        self.settings = load_settings()
         self.language = normalize_language(self.settings.language)
         self.history = ClipboardHistory(
             retention_seconds=RETENTION_SECONDS,
@@ -116,6 +120,8 @@ class ClipPocketApp:
         )
         self.opacity_var = tk.DoubleVar(value=self.settings.window_opacity * 100)
         self.opacity_value_var = tk.StringVar()
+        self.window_width_var = tk.StringVar(value=str(self.settings.window_width))
+        self.window_height_var = tk.StringVar(value=str(self.settings.window_height))
         self.retention_var = tk.StringVar(
             value=retention_label(
                 self.language,
@@ -126,6 +132,8 @@ class ClipPocketApp:
         self.keep_open_var = tk.BooleanVar(value=False)
         self.auto_hide_after_id: str | None = None
         self.auto_hide_anchor_position: tuple[int, int] | None = None
+        self.window_size_save_after_id: str | None = None
+        self.is_applying_window_size = False
         self.settings_window: tk.Toplevel | None = None
         self.settings_widgets: dict[str, tk.Misc] = {}
 
@@ -145,6 +153,7 @@ class ClipPocketApp:
 
         self.root.protocol("WM_DELETE_WINDOW", self.hide_window)
         self.root.bind("<Unmap>", self._hide_when_minimized)
+        self.root.bind("<Configure>", self._handle_root_configure)
         self.root.after(100, self._drain_host_events)
         self.root.after(60_000, self._expire_items)
 
@@ -243,6 +252,10 @@ class ClipPocketApp:
         status.grid(row=3, column=0, sticky="w", pady=(8, 0))
         self.main_widgets["status"] = status
 
+        size_grip = ttk.Sizegrip(body)
+        size_grip.grid(row=3, column=0, sticky="se", pady=(8, 0))
+        self.main_widgets["size_grip"] = size_grip
+
         self.item_menu = tk.Menu(self.root, tearoff=False)
         self.item_menu.add_command(
             label="",
@@ -285,6 +298,8 @@ class ClipPocketApp:
         self.settings_widgets["right_hint"].configure(text=self.tr("right_triple_click_hint"))
         self.settings_widgets["color_theme_label"].configure(text=self.tr("color_theme"))
         self.settings_widgets["opacity_label"].configure(text=self.tr("opacity"))
+        self.settings_widgets["window_width_label"].configure(text=self.tr("window_width"))
+        self.settings_widgets["window_height_label"].configure(text=self.tr("window_height"))
         self.settings_widgets["retention_label"].configure(text=self.tr("retention"))
         self.settings_widgets["max_items_label"].configure(text=self.tr("max_items"))
         self.settings_widgets["apply_button"].configure(text=self.tr("apply"))
@@ -464,6 +479,8 @@ class ClipPocketApp:
         self.color_theme_var.set(color_theme_label(self.language, self.settings.color_theme))
         self.opacity_var.set(self.settings.window_opacity * 100)
         self._update_opacity_value_label()
+        self.window_width_var.set(str(self.settings.window_width))
+        self.window_height_var.set(str(self.settings.window_height))
         self.retention_var.set(
             retention_label(
                 self.language,
@@ -574,8 +591,38 @@ class ClipPocketApp:
         opacity_value_label.grid(row=0, column=1, sticky="e", padx=(8, 0))
         self.settings_widgets["opacity_value_label"] = opacity_value_label
 
+        window_width_label = ttk.Label(frame)
+        window_width_label.grid(row=8, column=0, sticky="w", pady=4, padx=(0, 12))
+        self.settings_widgets["window_width_label"] = window_width_label
+
+        window_width_spinbox = tk.Spinbox(
+            frame,
+            from_=WINDOW_MIN_SIZE[0],
+            to=WINDOW_MAX_SIZE[0],
+            increment=20,
+            textvariable=self.window_width_var,
+            width=8,
+        )
+        window_width_spinbox.grid(row=8, column=1, sticky="w", pady=4)
+        self.settings_widgets["window_width_spinbox"] = window_width_spinbox
+
+        window_height_label = ttk.Label(frame)
+        window_height_label.grid(row=9, column=0, sticky="w", pady=4, padx=(0, 12))
+        self.settings_widgets["window_height_label"] = window_height_label
+
+        window_height_spinbox = tk.Spinbox(
+            frame,
+            from_=WINDOW_MIN_SIZE[1],
+            to=WINDOW_MAX_SIZE[1],
+            increment=20,
+            textvariable=self.window_height_var,
+            width=8,
+        )
+        window_height_spinbox.grid(row=9, column=1, sticky="w", pady=4)
+        self.settings_widgets["window_height_spinbox"] = window_height_spinbox
+
         retention_label_widget = ttk.Label(frame)
-        retention_label_widget.grid(row=8, column=0, sticky="w", pady=(10, 4), padx=(0, 12))
+        retention_label_widget.grid(row=10, column=0, sticky="w", pady=(10, 4), padx=(0, 12))
         self.settings_widgets["retention_label"] = retention_label_widget
 
         retention_combo = ttk.Combobox(
@@ -585,11 +632,11 @@ class ClipPocketApp:
             state="readonly",
             width=18,
         )
-        retention_combo.grid(row=8, column=1, sticky="ew", pady=(10, 4))
+        retention_combo.grid(row=10, column=1, sticky="ew", pady=(10, 4))
         self.settings_widgets["retention_combo"] = retention_combo
 
         max_items_label = ttk.Label(frame)
-        max_items_label.grid(row=9, column=0, sticky="w", pady=4, padx=(0, 12))
+        max_items_label.grid(row=11, column=0, sticky="w", pady=4, padx=(0, 12))
         self.settings_widgets["max_items_label"] = max_items_label
 
         max_items_spinbox = tk.Spinbox(
@@ -600,11 +647,11 @@ class ClipPocketApp:
             textvariable=self.max_items_var,
             width=8,
         )
-        max_items_spinbox.grid(row=9, column=1, sticky="w", pady=4)
+        max_items_spinbox.grid(row=11, column=1, sticky="w", pady=4)
         self.settings_widgets["max_items_spinbox"] = max_items_spinbox
 
         button_row = ttk.Frame(frame)
-        button_row.grid(row=10, column=0, columnspan=2, sticky="ew", pady=(14, 0))
+        button_row.grid(row=12, column=0, columnspan=2, sticky="ew", pady=(14, 0))
         button_row.columnconfigure(0, weight=1)
         self.settings_widgets["button_row"] = button_row
 
@@ -663,6 +710,8 @@ class ClipPocketApp:
             color_theme_key_from_label(self.language, self.color_theme_var.get())
         )
         window_opacity = normalize_window_opacity(self.opacity_var.get() / 100)
+        window_width = self._parse_window_width()
+        window_height = self._parse_window_height()
         retention_key = retention_key_from_label(self.language, self.retention_var.get())
         max_items = self._parse_max_items()
         retention_seconds = retention_seconds_from_key(retention_key)
@@ -674,6 +723,8 @@ class ClipPocketApp:
             max_items=max_items,
             color_theme=color_theme,
             window_opacity=window_opacity,
+            window_width=window_width,
+            window_height=window_height,
         )
         previous_startup_enabled = is_startup_enabled()
 
@@ -700,6 +751,7 @@ class ClipPocketApp:
         self.settings = new_settings
         self.language = language
         self.opacity_var.set(self.settings.window_opacity * 100)
+        self._apply_window_size(window_width, window_height)
         self.history.retention_seconds = self.settings.retention_seconds
         self.history.max_items = max_items
         changed = self.history.enforce_max_items()
@@ -726,6 +778,44 @@ class ClipPocketApp:
         value = normalize_max_items(value)
         self.max_items_var.set(str(value))
         return value
+
+    def _parse_window_width(self) -> int:
+        try:
+            value = int(self.window_width_var.get())
+        except ValueError:
+            value = self.settings.window_width
+        value = normalize_window_width(value)
+        self.window_width_var.set(str(value))
+        return value
+
+    def _parse_window_height(self) -> int:
+        try:
+            value = int(self.window_height_var.get())
+        except ValueError:
+            value = self.settings.window_height
+        value = normalize_window_height(value)
+        self.window_height_var.set(str(value))
+        return value
+
+    def _settings_window_geometry(self) -> str:
+        width = normalize_window_width(self.settings.window_width)
+        height = normalize_window_height(self.settings.window_height)
+        return f"{width}x{height}"
+
+    def _apply_window_size(self, width: int, height: int) -> None:
+        width = normalize_window_width(width)
+        height = normalize_window_height(height)
+        self.is_applying_window_size = True
+        try:
+            if self.root.state() == "normal":
+                self.root.geometry(
+                    f"{width}x{height}+{self.root.winfo_x()}+{self.root.winfo_y()}"
+                )
+            else:
+                self.root.geometry(f"{width}x{height}")
+            self.root.update_idletasks()
+        finally:
+            self.is_applying_window_size = False
 
     def _apply_visual_settings(self) -> None:
         theme = normalize_color_theme(self.settings.color_theme)
@@ -838,8 +928,10 @@ class ClipPocketApp:
             if key in self.settings_widgets:
                 self.settings_widgets[key].configure(foreground=palette["muted"])
 
-        spinbox = self.settings_widgets.get("max_items_spinbox")
-        if isinstance(spinbox, tk.Spinbox):
+        for key in ("window_width_spinbox", "window_height_spinbox", "max_items_spinbox"):
+            spinbox = self.settings_widgets.get(key)
+            if not isinstance(spinbox, tk.Spinbox):
+                continue
             try:
                 spinbox.configure(
                     background=palette["surface"],
@@ -945,6 +1037,45 @@ class ClipPocketApp:
     def _hide_when_minimized(self, _event: tk.Event) -> None:
         if self.root.state() == "iconic":
             self.root.after(0, self.hide_window)
+
+    def _handle_root_configure(self, event: tk.Event) -> None:
+        if (
+            self.is_exiting
+            or self.is_applying_window_size
+            or event.widget is not self.root
+            or self.root.state() != "normal"
+        ):
+            return
+
+        width = normalize_window_width(event.width)
+        height = normalize_window_height(event.height)
+        if width == self.settings.window_width and height == self.settings.window_height:
+            return
+
+        self.settings = replace(self.settings, window_width=width, window_height=height)
+        self.window_width_var.set(str(width))
+        self.window_height_var.set(str(height))
+        self._schedule_window_size_save()
+
+    def _schedule_window_size_save(self) -> None:
+        if self.window_size_save_after_id is not None:
+            self.root.after_cancel(self.window_size_save_after_id)
+        self.window_size_save_after_id = self.root.after(700, self._save_window_size_setting)
+
+    def _save_window_size_setting(self) -> None:
+        self.window_size_save_after_id = None
+        try:
+            save_settings(self.settings)
+        except OSError:
+            self.status_var.set(self.tr("status_settings_failed"))
+
+    def _cancel_window_size_save(self) -> None:
+        if self.window_size_save_after_id is not None:
+            try:
+                self.root.after_cancel(self.window_size_save_after_id)
+            except tk.TclError:
+                pass
+            self.window_size_save_after_id = None
 
     def _position_near_pointer(self, x: int | None, y: int | None) -> None:
         pointer_x, pointer_y = self._window_anchor_point(x, y)
@@ -1160,5 +1291,6 @@ class ClipPocketApp:
         self.is_exiting = True
         self._cancel_auto_hide_watch()
         self._cancel_clipboard_suppression_timer()
+        self._cancel_window_size_save()
         self.host.stop()
         self.root.destroy()

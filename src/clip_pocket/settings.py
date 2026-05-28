@@ -7,7 +7,14 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
 
-from clip_pocket.constants import MAX_ITEMS, RETENTION_SECONDS
+from clip_pocket.constants import (
+    DEFAULT_WINDOW_HEIGHT,
+    DEFAULT_WINDOW_WIDTH,
+    MAX_ITEMS,
+    RETENTION_SECONDS,
+    WINDOW_MAX_SIZE,
+    WINDOW_MIN_SIZE,
+)
 from clip_pocket.i18n import normalize_language
 
 
@@ -26,6 +33,22 @@ def normalize_max_items(value: object) -> int:
     except (TypeError, ValueError):
         return MAX_ITEMS
     return min(max(number, MIN_MAX_ITEMS), MAX_MAX_ITEMS)
+
+
+def normalize_window_width(value: object) -> int:
+    return normalize_dimension(value, DEFAULT_WINDOW_WIDTH, WINDOW_MIN_SIZE[0], WINDOW_MAX_SIZE[0])
+
+
+def normalize_window_height(value: object) -> int:
+    return normalize_dimension(value, DEFAULT_WINDOW_HEIGHT, WINDOW_MIN_SIZE[1], WINDOW_MAX_SIZE[1])
+
+
+def normalize_dimension(value: object, default: int, minimum: int, maximum: int) -> int:
+    try:
+        number = int(value)
+    except (TypeError, ValueError):
+        return default
+    return min(max(number, minimum), maximum)
 
 
 def normalize_bool(value: object, default: bool) -> bool:
@@ -71,6 +94,8 @@ class AppSettings:
     max_items: int = MAX_ITEMS
     color_theme: str = DEFAULT_COLOR_THEME
     window_opacity: float = DEFAULT_WINDOW_OPACITY
+    window_width: int = DEFAULT_WINDOW_WIDTH
+    window_height: int = DEFAULT_WINDOW_HEIGHT
 
     @classmethod
     def from_mapping(cls, value: dict[str, Any]) -> AppSettings:
@@ -91,6 +116,12 @@ class AppSettings:
             color_theme=normalize_color_theme(value.get("color_theme", DEFAULT_COLOR_THEME)),
             window_opacity=normalize_window_opacity(
                 value.get("window_opacity", DEFAULT_WINDOW_OPACITY)
+            ),
+            window_width=normalize_window_width(
+                value.get("window_width", DEFAULT_WINDOW_WIDTH)
+            ),
+            window_height=normalize_window_height(
+                value.get("window_height", DEFAULT_WINDOW_HEIGHT)
             ),
         )
 

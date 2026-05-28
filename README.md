@@ -56,6 +56,7 @@ The experimental right-click triple-click gesture is disabled by default. Enable
 - Configurable maximum item count
 - White or black window color
 - Configurable window opacity
+- Configurable window size, either by dragging the window edge or from Settings
 
 ## Install
 
@@ -77,6 +78,8 @@ Available settings:
 - Language
 - Color
 - Opacity (0-100%; 0% is still kept faintly visible so the window cannot disappear completely)
+- Window width
+- Window height
 - Delete copied items after
 - Maximum copied items
 

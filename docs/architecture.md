@@ -28,7 +28,7 @@ Clip Pocket is split into small modules so the app can be reviewed and tested be
 
 - `clip_pocket.settings`
   - Owns lightweight local settings persisted under the current user's local app-data directory.
-  - Stores UI language, gesture options, color theme, window opacity, retention period, and maximum item count.
+  - Stores UI language, gesture options, color theme, window opacity, window size, retention period, and maximum item count.
   - Startup registration itself stays in `clip_pocket.startup`.
 
 - `clip_pocket.startup`
