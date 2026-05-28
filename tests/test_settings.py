@@ -104,11 +104,15 @@ class SettingsTest(unittest.TestCase):
             path.write_text(json.dumps({"window_opacity": "not a number"}), encoding="utf-8")
             invalid_settings = load_settings(path)
 
+            path.write_text(json.dumps({"window_opacity": -1}), encoding="utf-8")
+            minimum_settings = load_settings(path)
+
         self.assertEqual(low_settings.color_theme, "light")
-        self.assertEqual(low_settings.window_opacity, 0.6)
+        self.assertEqual(low_settings.window_opacity, 0.2)
         self.assertEqual(high_settings.color_theme, "dark")
         self.assertEqual(high_settings.window_opacity, 1.0)
         self.assertEqual(invalid_settings.window_opacity, 1.0)
+        self.assertEqual(minimum_settings.window_opacity, 0.0)
 
     def test_save_settings_replaces_existing_file(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

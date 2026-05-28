@@ -76,7 +76,7 @@ Available settings:
 - Open with right-click triple-click (experimental, off by default)
 - Language
 - Color
-- Opacity
+- Opacity (0-100%; 0% is still kept faintly visible so the window cannot disappear completely)
 - Delete copied items after
 - Maximum copied items
 

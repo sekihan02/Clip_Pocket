@@ -48,6 +48,9 @@ from clip_pocket.startup import is_startup_enabled, set_startup_enabled
 from clip_pocket.win32_host import WindowsEvent, WindowsEventType, WindowsHost
 
 
+MIN_VISIBLE_WINDOW_OPACITY = 0.08
+
+
 THEME_PALETTES = {
     "light": {
         "background": "#f7f7f7",
@@ -559,7 +562,7 @@ class ClipPocketApp:
 
         opacity_scale = ttk.Scale(
             opacity_row,
-            from_=60,
+            from_=0,
             to=100,
             variable=self.opacity_var,
             command=self._on_opacity_scale_changed,
@@ -861,8 +864,9 @@ class ClipPocketApp:
 
     @staticmethod
     def _apply_window_opacity(window: tk.Misc, opacity: float) -> None:
+        effective_opacity = max(opacity, MIN_VISIBLE_WINDOW_OPACITY)
         try:
-            window.attributes("-alpha", opacity)  # type: ignore[attr-defined]
+            window.attributes("-alpha", effective_opacity)  # type: ignore[attr-defined]
         except tk.TclError:
             pass
 
@@ -874,7 +878,7 @@ class ClipPocketApp:
             percent = round(float(self.opacity_var.get()))
         except tk.TclError:
             percent = 100
-        percent = min(max(percent, 60), 100)
+        percent = min(max(percent, 0), 100)
         self.opacity_value_var.set(self.tr("opacity_value", percent=percent))
 
     def _expire_items(self, now: float | None = None) -> None:
