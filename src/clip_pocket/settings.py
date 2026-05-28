@@ -8,9 +8,12 @@ from pathlib import Path
 from typing import Any
 
 from clip_pocket.constants import (
+    DEFAULT_FONT_SIZE,
     DEFAULT_WINDOW_HEIGHT,
     DEFAULT_WINDOW_WIDTH,
+    MAX_FONT_SIZE,
     MAX_ITEMS,
+    MIN_FONT_SIZE,
     RETENTION_SECONDS,
     WINDOW_MAX_SIZE,
     WINDOW_MIN_SIZE,
@@ -41,6 +44,10 @@ def normalize_window_width(value: object) -> int:
 
 def normalize_window_height(value: object) -> int:
     return normalize_dimension(value, DEFAULT_WINDOW_HEIGHT, WINDOW_MIN_SIZE[1], WINDOW_MAX_SIZE[1])
+
+
+def normalize_font_size(value: object) -> int:
+    return normalize_dimension(value, DEFAULT_FONT_SIZE, MIN_FONT_SIZE, MAX_FONT_SIZE)
 
 
 def normalize_dimension(value: object, default: int, minimum: int, maximum: int) -> int:
@@ -96,6 +103,7 @@ class AppSettings:
     window_opacity: float = DEFAULT_WINDOW_OPACITY
     window_width: int = DEFAULT_WINDOW_WIDTH
     window_height: int = DEFAULT_WINDOW_HEIGHT
+    font_size: int = DEFAULT_FONT_SIZE
 
     @classmethod
     def from_mapping(cls, value: dict[str, Any]) -> AppSettings:
@@ -123,6 +131,7 @@ class AppSettings:
             window_height=normalize_window_height(
                 value.get("window_height", DEFAULT_WINDOW_HEIGHT)
             ),
+            font_size=normalize_font_size(value.get("font_size", DEFAULT_FONT_SIZE)),
         )
 
 

@@ -4,6 +4,7 @@ from dataclasses import replace
 import queue
 import time
 import tkinter as tk
+from tkinter import font as tkfont
 from tkinter import ttk
 
 from clip_pocket.constants import (
@@ -13,9 +14,11 @@ from clip_pocket.constants import (
     AUTO_HIDE_POLL_INTERVAL_MS,
     AUTO_HIDE_STILL_POINTER_TOLERANCE_PX,
     CLIPBOARD_RETRY_DELAYS_MS,
+    MAX_FONT_SIZE,
     MAX_PREVIEW_LENGTH,
     MAX_TEXT_LENGTH,
     MAX_TOTAL_TEXT_LENGTH,
+    MIN_FONT_SIZE,
     MIN_TEXT_LENGTH,
     RETENTION_SECONDS,
     WINDOW_SCREEN_MARGIN_PX,
@@ -41,6 +44,7 @@ from clip_pocket.settings import (
     AppSettings,
     load_settings,
     normalize_color_theme,
+    normalize_font_size,
     normalize_window_height,
     normalize_window_width,
     normalize_max_items,
@@ -250,6 +254,7 @@ class ClipPocketApp:
         )
         self.opacity_var = tk.DoubleVar(value=self.settings.window_opacity * 100)
         self.opacity_value_var = tk.StringVar()
+        self.font_size_var = tk.StringVar(value=str(self.settings.font_size))
         self.window_width_var = tk.StringVar(value=str(self.settings.window_width))
         self.window_height_var = tk.StringVar(value=str(self.settings.window_height))
         self.retention_var = tk.StringVar(
@@ -270,6 +275,7 @@ class ClipPocketApp:
         self._build_ui()
         self._apply_language()
         self._apply_visual_settings()
+        self._apply_font_settings()
         self.root.update_idletasks()
 
         self.host = WindowsHost(
@@ -416,6 +422,7 @@ class ClipPocketApp:
         self.settings_widgets["right_hint"].configure(text=self.tr("right_triple_click_hint"))
         self.settings_widgets["color_theme_label"].configure(text=self.tr("color_theme"))
         self.settings_widgets["opacity_label"].configure(text=self.tr("opacity"))
+        self.settings_widgets["font_size_label"].configure(text=self.tr("font_size"))
         self.settings_widgets["window_width_label"].configure(text=self.tr("window_width"))
         self.settings_widgets["window_height_label"].configure(text=self.tr("window_height"))
         self.settings_widgets["retention_label"].configure(text=self.tr("retention"))
@@ -597,6 +604,7 @@ class ClipPocketApp:
         self.color_theme_var.set(color_theme_label(self.language, self.settings.color_theme))
         self.opacity_var.set(self.settings.window_opacity * 100)
         self._update_opacity_value_label()
+        self.font_size_var.set(str(self.settings.font_size))
         self.window_width_var.set(str(self.settings.window_width))
         self.window_height_var.set(str(self.settings.window_height))
         self.retention_var.set(
@@ -709,8 +717,23 @@ class ClipPocketApp:
         opacity_value_label.grid(row=0, column=1, sticky="e", padx=(8, 0))
         self.settings_widgets["opacity_value_label"] = opacity_value_label
 
+        font_size_label = ttk.Label(frame)
+        font_size_label.grid(row=8, column=0, sticky="w", pady=4, padx=(0, 12))
+        self.settings_widgets["font_size_label"] = font_size_label
+
+        font_size_spinbox = tk.Spinbox(
+            frame,
+            from_=MIN_FONT_SIZE,
+            to=MAX_FONT_SIZE,
+            increment=1,
+            textvariable=self.font_size_var,
+            width=8,
+        )
+        font_size_spinbox.grid(row=8, column=1, sticky="w", pady=4)
+        self.settings_widgets["font_size_spinbox"] = font_size_spinbox
+
         window_width_label = ttk.Label(frame)
-        window_width_label.grid(row=8, column=0, sticky="w", pady=4, padx=(0, 12))
+        window_width_label.grid(row=9, column=0, sticky="w", pady=4, padx=(0, 12))
         self.settings_widgets["window_width_label"] = window_width_label
 
         window_width_spinbox = tk.Spinbox(
@@ -721,11 +744,11 @@ class ClipPocketApp:
             textvariable=self.window_width_var,
             width=8,
         )
-        window_width_spinbox.grid(row=8, column=1, sticky="w", pady=4)
+        window_width_spinbox.grid(row=9, column=1, sticky="w", pady=4)
         self.settings_widgets["window_width_spinbox"] = window_width_spinbox
 
         window_height_label = ttk.Label(frame)
-        window_height_label.grid(row=9, column=0, sticky="w", pady=4, padx=(0, 12))
+        window_height_label.grid(row=10, column=0, sticky="w", pady=4, padx=(0, 12))
         self.settings_widgets["window_height_label"] = window_height_label
 
         window_height_spinbox = tk.Spinbox(
@@ -736,11 +759,11 @@ class ClipPocketApp:
             textvariable=self.window_height_var,
             width=8,
         )
-        window_height_spinbox.grid(row=9, column=1, sticky="w", pady=4)
+        window_height_spinbox.grid(row=10, column=1, sticky="w", pady=4)
         self.settings_widgets["window_height_spinbox"] = window_height_spinbox
 
         retention_label_widget = ttk.Label(frame)
-        retention_label_widget.grid(row=10, column=0, sticky="w", pady=(10, 4), padx=(0, 12))
+        retention_label_widget.grid(row=11, column=0, sticky="w", pady=(10, 4), padx=(0, 12))
         self.settings_widgets["retention_label"] = retention_label_widget
 
         retention_combo = ttk.Combobox(
@@ -750,11 +773,11 @@ class ClipPocketApp:
             state="readonly",
             width=18,
         )
-        retention_combo.grid(row=10, column=1, sticky="ew", pady=(10, 4))
+        retention_combo.grid(row=11, column=1, sticky="ew", pady=(10, 4))
         self.settings_widgets["retention_combo"] = retention_combo
 
         max_items_label = ttk.Label(frame)
-        max_items_label.grid(row=11, column=0, sticky="w", pady=4, padx=(0, 12))
+        max_items_label.grid(row=12, column=0, sticky="w", pady=4, padx=(0, 12))
         self.settings_widgets["max_items_label"] = max_items_label
 
         max_items_spinbox = tk.Spinbox(
@@ -765,11 +788,11 @@ class ClipPocketApp:
             textvariable=self.max_items_var,
             width=8,
         )
-        max_items_spinbox.grid(row=11, column=1, sticky="w", pady=4)
+        max_items_spinbox.grid(row=12, column=1, sticky="w", pady=4)
         self.settings_widgets["max_items_spinbox"] = max_items_spinbox
 
         button_row = ttk.Frame(frame)
-        button_row.grid(row=12, column=0, columnspan=2, sticky="ew", pady=(14, 0))
+        button_row.grid(row=13, column=0, columnspan=2, sticky="ew", pady=(14, 0))
         button_row.columnconfigure(0, weight=1)
         self.settings_widgets["button_row"] = button_row
 
@@ -796,6 +819,7 @@ class ClipPocketApp:
 
         self._apply_settings_language()
         self._apply_visual_settings()
+        self._apply_font_settings()
 
         window.update_idletasks()
         self._position_settings_window(window)
@@ -828,6 +852,7 @@ class ClipPocketApp:
             color_theme_key_from_label(self.language, self.color_theme_var.get())
         )
         window_opacity = normalize_window_opacity(self.opacity_var.get() / 100)
+        font_size = self._parse_font_size()
         window_width = self._parse_window_width()
         window_height = self._parse_window_height()
         retention_key = retention_key_from_label(self.language, self.retention_var.get())
@@ -841,6 +866,7 @@ class ClipPocketApp:
             max_items=max_items,
             color_theme=color_theme,
             window_opacity=window_opacity,
+            font_size=font_size,
             window_width=window_width,
             window_height=window_height,
         )
@@ -869,6 +895,7 @@ class ClipPocketApp:
         self.settings = new_settings
         self.language = language
         self.opacity_var.set(self.settings.window_opacity * 100)
+        self.font_size_var.set(str(font_size))
         self._apply_window_size(window_width, window_height)
         self.history.retention_seconds = self.settings.retention_seconds
         self.history.max_items = max_items
@@ -885,8 +912,18 @@ class ClipPocketApp:
         )
         self._apply_language()
         self._apply_visual_settings()
+        self._apply_font_settings()
         self.status_var.set(self.tr("status_settings_saved"))
         self._close_settings_window()
+
+    def _parse_font_size(self) -> int:
+        try:
+            value = int(self.font_size_var.get())
+        except ValueError:
+            value = self.settings.font_size
+        value = normalize_font_size(value)
+        self.font_size_var.set(str(value))
+        return value
 
     def _parse_max_items(self) -> int:
         try:
@@ -952,6 +989,47 @@ class ClipPocketApp:
         self._configure_ttk_style(palette)
         self._configure_main_window_visuals(palette, opacity)
         self._configure_settings_window_visuals(palette, opacity)
+
+    def _apply_font_settings(self) -> None:
+        base_size = normalize_font_size(self.settings.font_size)
+        family = "Yu Gothic UI"
+        default_font = (family, base_size)
+        title_font = (family, base_size + 4, "bold")
+
+        for name in (
+            "TkDefaultFont",
+            "TkTextFont",
+            "TkMenuFont",
+            "TkCaptionFont",
+            "TkSmallCaptionFont",
+            "TkIconFont",
+        ):
+            try:
+                tkfont.nametofont(name).configure(family=family, size=base_size)
+            except tk.TclError:
+                pass
+
+        self.style.configure(".", font=default_font)
+        self.style.configure("TLabel", font=default_font)
+        self.style.configure("TButton", font=default_font)
+        self.style.configure("TCheckbutton", font=default_font)
+        self.style.configure("TCombobox", font=default_font)
+        self.listbox.configure(font=default_font)
+        self.item_menu.configure(font=default_font)
+
+        if self.settings_window is not None and self.settings_window.winfo_exists():
+            title = self.settings_widgets.get("title")
+            if isinstance(title, ttk.Label):
+                title.configure(font=title_font)
+            for key in (
+                "font_size_spinbox",
+                "window_width_spinbox",
+                "window_height_spinbox",
+                "max_items_spinbox",
+            ):
+                spinbox = self.settings_widgets.get(key)
+                if isinstance(spinbox, tk.Spinbox):
+                    spinbox.configure(font=default_font)
 
     def _configure_ttk_style(self, palette: dict[str, str]) -> None:
         try:
@@ -1062,7 +1140,12 @@ class ClipPocketApp:
             if key in self.settings_widgets:
                 self.settings_widgets[key].configure(foreground=palette["muted"])
 
-        for key in ("window_width_spinbox", "window_height_spinbox", "max_items_spinbox"):
+        for key in (
+            "font_size_spinbox",
+            "window_width_spinbox",
+            "window_height_spinbox",
+            "max_items_spinbox",
+        ):
             spinbox = self.settings_widgets.get(key)
             if not isinstance(spinbox, tk.Spinbox):
                 continue

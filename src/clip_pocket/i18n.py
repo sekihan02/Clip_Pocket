@@ -11,7 +11,6 @@ LANGUAGE_NAMES = {
 TEXT = {
     "en": {
         "app_settings": "Clip Pocket Settings",
-        "copied_items": "Copied items",
         "restore": "Restore to clipboard",
         "delete": "Delete",
         "keep_open": "Keep window open",
@@ -46,6 +45,7 @@ TEXT = {
         "color_theme": "Color",
         "opacity": "Opacity",
         "opacity_value": "{percent}%",
+        "font_size": "Font size",
         "window_width": "Window width",
         "window_height": "Window height",
         "retention": "Delete copied items after",
@@ -66,7 +66,6 @@ TEXT = {
     },
     "ja": {
         "app_settings": "Clip Pocket 設定",
-        "copied_items": "コピーされたもの",
         "restore": "クリップボードに戻す",
         "delete": "削除",
         "keep_open": "ウィンドウを固定",
@@ -101,6 +100,7 @@ TEXT = {
         "color_theme": "色",
         "opacity": "透過率",
         "opacity_value": "{percent}%",
+        "font_size": "文字サイズ",
         "window_width": "ウィンドウ幅",
         "window_height": "ウィンドウ高さ",
         "retention": "コピーの削除までの期間",
