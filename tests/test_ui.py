@@ -1,6 +1,7 @@
 import unittest
 
 from clip_pocket.constants import MAX_PREVIEW_LENGTH
+from clip_pocket.settings import AppSettings
 
 try:
     from clip_pocket.ui import ClipPocketApp
@@ -58,6 +59,35 @@ class UiHelpersTest(unittest.TestCase):
     def test_point_moved_uses_tolerance(self) -> None:
         self.assertFalse(ClipPocketApp._point_moved((100, 100), (102, 103), 3))
         self.assertTrue(ClipPocketApp._point_moved((100, 100), (104, 103), 3))
+
+    def test_position_uses_saved_window_size(self) -> None:
+        class FakeRoot:
+            geometry_value = ""
+
+            def winfo_vrootx(self) -> int:
+                return 0
+
+            def winfo_vrooty(self) -> int:
+                return 0
+
+            def winfo_vrootwidth(self) -> int:
+                return 1920
+
+            def winfo_vrootheight(self) -> int:
+                return 1080
+
+            def geometry(self, value: str) -> None:
+                self.geometry_value = value
+
+        fake_root = FakeRoot()
+        app = object.__new__(ClipPocketApp)
+        app.root = fake_root
+        app.settings = AppSettings(window_width=640, window_height=420)
+        app._window_anchor_point = lambda _x, _y: (100, 100)
+
+        ClipPocketApp._position_near_pointer(app, None, None)
+
+        self.assertTrue(fake_root.geometry_value.startswith("640x420+"))
 
 
 if __name__ == "__main__":

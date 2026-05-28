@@ -798,9 +798,18 @@ class ClipPocketApp:
         return value
 
     def _settings_window_geometry(self) -> str:
-        width = normalize_window_width(self.settings.window_width)
-        height = normalize_window_height(self.settings.window_height)
+        width, height = self._configured_window_size()
         return f"{width}x{height}"
+
+    def _configured_window_size(self) -> tuple[int, int]:
+        return self._normalize_window_size(
+            self.settings.window_width,
+            self.settings.window_height,
+        )
+
+    @staticmethod
+    def _normalize_window_size(width: object, height: object) -> tuple[int, int]:
+        return normalize_window_width(width), normalize_window_height(height)
 
     def _apply_window_size(self, width: int, height: int) -> None:
         width = normalize_window_width(width)
@@ -1032,6 +1041,8 @@ class ClipPocketApp:
     def hide_window(self) -> None:
         self._cancel_auto_hide_watch()
         self.auto_hide_anchor_position = None
+        self._capture_current_window_size()
+        self._flush_window_size_save()
         self.root.withdraw()
 
     def _hide_when_minimized(self, _event: tk.Event) -> None:
@@ -1047,8 +1058,19 @@ class ClipPocketApp:
         ):
             return
 
-        width = normalize_window_width(event.width)
-        height = normalize_window_height(event.height)
+        self._capture_window_size(event.width, event.height)
+
+    def _capture_current_window_size(self) -> None:
+        if (
+            self.is_exiting
+            or self.is_applying_window_size
+            or self.root.state() != "normal"
+        ):
+            return
+        self._capture_window_size(self.root.winfo_width(), self.root.winfo_height())
+
+    def _capture_window_size(self, width: int, height: int) -> None:
+        width, height = self._normalize_window_size(width, height)
         if width == self.settings.window_width and height == self.settings.window_height:
             return
 
@@ -1069,6 +1091,16 @@ class ClipPocketApp:
         except OSError:
             self.status_var.set(self.tr("status_settings_failed"))
 
+    def _flush_window_size_save(self) -> None:
+        if self.window_size_save_after_id is None:
+            return
+        try:
+            self.root.after_cancel(self.window_size_save_after_id)
+        except tk.TclError:
+            pass
+        self.window_size_save_after_id = None
+        self._save_window_size_setting()
+
     def _cancel_window_size_save(self) -> None:
         if self.window_size_save_after_id is not None:
             try:
@@ -1080,8 +1112,7 @@ class ClipPocketApp:
     def _position_near_pointer(self, x: int | None, y: int | None) -> None:
         pointer_x, pointer_y = self._window_anchor_point(x, y)
 
-        width = max(self.root.winfo_width(), self.root.winfo_reqwidth())
-        height = max(self.root.winfo_height(), self.root.winfo_reqheight())
+        width, height = self._configured_window_size()
         bounds_x = self.root.winfo_vrootx()
         bounds_y = self.root.winfo_vrooty()
         bounds_width = self.root.winfo_vrootwidth()
@@ -1291,6 +1322,6 @@ class ClipPocketApp:
         self.is_exiting = True
         self._cancel_auto_hide_watch()
         self._cancel_clipboard_suppression_timer()
-        self._cancel_window_size_save()
+        self._flush_window_size_save()
         self.host.stop()
         self.root.destroy()
