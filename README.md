@@ -9,7 +9,7 @@
 
 Clip Pocket is a resident Windows app for keeping copied text temporarily and choosing it again when you want to paste it later.
 
-Current source version: v0.2.1
+Current source version: v0.3.0
 
 [日本語 README](docs/README.ja.md)
 
