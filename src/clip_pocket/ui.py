@@ -15,9 +15,9 @@ from clip_pocket.constants import (
     AUTO_HIDE_STILL_POINTER_TOLERANCE_PX,
     CLIPBOARD_RETRY_DELAYS_MS,
     MAX_FONT_SIZE,
+    MAX_HISTORY_TEXT_LENGTH,
     MAX_PREVIEW_LENGTH,
-    MAX_TEXT_LENGTH,
-    MAX_TOTAL_TEXT_LENGTH,
+    MAX_ITEM_TEXT_LENGTH,
     MIN_FONT_SIZE,
     MIN_TEXT_LENGTH,
     RETENTION_SECONDS,
@@ -235,8 +235,8 @@ class ClipPocketApp:
             retention_seconds=RETENTION_SECONDS,
             min_text_length=MIN_TEXT_LENGTH,
             max_items=self.settings.max_items,
-            max_text_length=MAX_TEXT_LENGTH,
-            max_total_text_length=MAX_TOTAL_TEXT_LENGTH,
+            max_item_text_length=MAX_ITEM_TEXT_LENGTH,
+            max_history_text_length=MAX_HISTORY_TEXT_LENGTH,
         )
         self.history.retention_seconds = self.settings.retention_seconds
         self.events: queue.SimpleQueue[WindowsEvent] = queue.SimpleQueue()

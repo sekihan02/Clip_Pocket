@@ -31,22 +31,23 @@ class ClipboardHistory:
         retention_seconds: int | None,
         min_text_length: int,
         max_items: int,
-        max_text_length: int,
-        max_total_text_length: int,
+        max_item_text_length: int,
+        max_history_text_length: int,
     ) -> None:
         self.retention_seconds = retention_seconds
         self.min_text_length = min_text_length
         self.max_items = max_items
-        self.max_text_length = max_text_length
-        self.max_total_text_length = max_total_text_length
+        self.max_item_text_length = max_item_text_length
+        self.max_history_text_length = max_history_text_length
         self.items: list[ClipboardItem] = []
 
     def add_or_refresh(self, text: str, now: float) -> HistoryChange:
         if len(text.strip()) < self.min_text_length:
             return HistoryChange.IGNORED
-        if len(text) > self.max_text_length:
+        item_text_length = len(text)
+        if item_text_length > self.max_item_text_length:
             return HistoryChange.IGNORED
-        if len(text) > self.max_total_text_length:
+        if item_text_length > self.max_history_text_length:
             return HistoryChange.IGNORED
 
         text_hash = fingerprint(text)
@@ -104,7 +105,7 @@ class ClipboardHistory:
         kept: list[ClipboardItem] = []
         for item in self.items:
             total += len(item.text)
-            if total <= self.max_total_text_length:
+            if total <= self.max_history_text_length:
                 kept.append(item)
         self.items = kept
         return len(self.items) != before

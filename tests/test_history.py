@@ -9,15 +9,15 @@ def make_history(
     retention_seconds: int | None = 60,
     min_text_length: int = 1,
     max_items: int = 100,
-    max_text_length: int = 100_000,
-    max_total_text_length: int = 5_000_000,
+    max_item_text_length: int = 100_000,
+    max_history_text_length: int = 5_000_000,
 ) -> ClipboardHistory:
     return ClipboardHistory(
         retention_seconds=retention_seconds,
         min_text_length=min_text_length,
         max_items=max_items,
-        max_text_length=max_text_length,
-        max_total_text_length=max_total_text_length,
+        max_item_text_length=max_item_text_length,
+        max_history_text_length=max_history_text_length,
     )
 
 
@@ -98,7 +98,7 @@ class ClipboardHistoryTest(unittest.TestCase):
         self.assertIsNone(history.remaining_minutes(history.items[0], 999_999))
 
     def test_ignores_text_longer_than_limit(self) -> None:
-        history = make_history(max_text_length=4)
+        history = make_history(max_item_text_length=4)
 
         self.assertIs(history.add_or_refresh("12345", 0), HistoryChange.IGNORED)
         self.assertEqual(history.items, [])
@@ -113,13 +113,19 @@ class ClipboardHistoryTest(unittest.TestCase):
         self.assertEqual([item.text for item in history.items], ["three", "two"])
 
     def test_keeps_within_total_text_length_limit(self) -> None:
-        history = make_history(max_total_text_length=8)
+        history = make_history(max_history_text_length=8)
 
         history.add_or_refresh("abcd", 0)
         history.add_or_refresh("efgh", 1)
         history.add_or_refresh("ijkl", 2)
 
         self.assertEqual([item.text for item in history.items], ["ijkl", "efgh"])
+
+    def test_ignores_item_that_cannot_fit_history_text_limit(self) -> None:
+        history = make_history(max_item_text_length=100, max_history_text_length=4)
+
+        self.assertIs(history.add_or_refresh("12345", 0), HistoryChange.IGNORED)
+        self.assertEqual(history.items, [])
 
 
 if __name__ == "__main__":
