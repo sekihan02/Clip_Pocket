@@ -37,6 +37,9 @@ from clip_pocket.i18n import (
     retention_label,
     retention_labels,
     retention_seconds_from_key,
+    sort_key_from_label,
+    sort_label,
+    sort_labels,
     text,
 )
 from clip_pocket.resources import app_icon_path
@@ -245,6 +248,10 @@ class ClipPocketApp:
         self.capture_paused = False
         self.is_exiting = False
         self.main_widgets: dict[str, tk.Misc] = {}
+        self.visible_history_indices: list[int] = []
+        self.search_var = tk.StringVar(value="")
+        self.sort_key = "updated_desc"
+        self.sort_var = tk.StringVar(value=sort_label(self.language, self.sort_key))
         self.startup_enabled_var = tk.BooleanVar(value=is_startup_enabled())
         self.language_var = tk.StringVar(value=LANGUAGE_NAMES[self.language])
         self.ctrl_double_tap_var = tk.BooleanVar(value=self.settings.ctrl_double_tap_enabled)
@@ -305,11 +312,47 @@ class ClipPocketApp:
         body = ttk.Frame(self.root, padding=(18, 14, 18, 14))
         body.grid(row=0, column=0, sticky="nsew")
         body.columnconfigure(0, weight=1)
-        body.rowconfigure(0, weight=1)
+        body.rowconfigure(1, weight=1)
         self.main_widgets["body"] = body
 
+        filter_row = ttk.Frame(body)
+        filter_row.grid(row=0, column=0, sticky="ew", pady=(0, 8))
+        filter_row.columnconfigure(1, weight=1)
+        self.main_widgets["filter_row"] = filter_row
+
+        search_label = ttk.Label(filter_row)
+        search_label.grid(row=0, column=0, sticky="w", padx=(0, 8))
+        self.main_widgets["search_label"] = search_label
+
+        search_entry = ttk.Entry(filter_row, textvariable=self.search_var)
+        search_entry.grid(row=0, column=1, sticky="ew")
+        self.main_widgets["search_entry"] = search_entry
+        self.search_var.trace_add("write", self._handle_list_filter_changed)
+
+        clear_search_button = ttk.Button(
+            filter_row,
+            command=self._clear_search,
+        )
+        clear_search_button.grid(row=0, column=2, padx=(8, 14))
+        self.main_widgets["clear_search_button"] = clear_search_button
+
+        sort_label_widget = ttk.Label(filter_row)
+        sort_label_widget.grid(row=0, column=3, sticky="w", padx=(0, 8))
+        self.main_widgets["sort_label"] = sort_label_widget
+
+        sort_combo = ttk.Combobox(
+            filter_row,
+            textvariable=self.sort_var,
+            values=sort_labels(self.language),
+            state="readonly",
+            width=15,
+        )
+        sort_combo.grid(row=0, column=4, sticky="e")
+        sort_combo.bind("<<ComboboxSelected>>", self._handle_sort_changed)
+        self.main_widgets["sort_combo"] = sort_combo
+
         list_frame = ttk.Frame(body)
-        list_frame.grid(row=0, column=0, sticky="nsew")
+        list_frame.grid(row=1, column=0, sticky="nsew")
         list_frame.columnconfigure(0, weight=1)
         list_frame.rowconfigure(0, weight=1)
         self.main_widgets["list_frame"] = list_frame
@@ -332,7 +375,7 @@ class ClipPocketApp:
         self.main_widgets["history_scrollbar"] = scrollbar
 
         button_row = ttk.Frame(body)
-        button_row.grid(row=1, column=0, sticky="ew", pady=(10, 0))
+        button_row.grid(row=2, column=0, sticky="ew", pady=(10, 0))
         button_row.columnconfigure(4, weight=1)
         self.main_widgets["button_row"] = button_row
 
@@ -374,11 +417,11 @@ class ClipPocketApp:
 
         self.status_var = tk.StringVar(value="")
         status = ttk.Label(body, textvariable=self.status_var, foreground="#555555")
-        status.grid(row=2, column=0, sticky="w", pady=(8, 0))
+        status.grid(row=3, column=0, sticky="w", pady=(8, 0))
         self.main_widgets["status"] = status
 
         size_grip = ttk.Sizegrip(body)
-        size_grip.grid(row=2, column=0, sticky="se", pady=(8, 0))
+        size_grip.grid(row=3, column=0, sticky="se", pady=(8, 0))
         self.main_widgets["size_grip"] = size_grip
 
         self.item_menu = tk.Menu(self.root, tearoff=False)
@@ -398,12 +441,18 @@ class ClipPocketApp:
         self.root.title(APP_NAME)
         self.main_widgets["restore_button"].configure(text=self.tr("restore"))
         self.main_widgets["delete_button"].configure(text=self.tr("delete"))
+        self.main_widgets["search_label"].configure(text=self.tr("search"))
+        self.main_widgets["clear_search_button"].configure(text=self.tr("clear_search"))
+        self.main_widgets["sort_label"].configure(text=self.tr("sort"))
         self.main_widgets["keep_open_check"].configure(text=self.tr("keep_open"))
         self.main_widgets["settings_button"].configure(text=self.tr("menu_settings"))
+        sort_combo = self.main_widgets["sort_combo"]
+        sort_combo.configure(values=sort_labels(self.language))
+        self.sort_var.set(sort_label(self.language, self.sort_key))
         self._update_monitoring_label()
         self.item_menu.entryconfigure(0, label=self.tr("restore"))
         self.item_menu.entryconfigure(1, label=self.tr("delete"))
-        self.count_label.configure(text=self.tr("count", count=len(self.history.items)))
+        self._update_count_label()
         if not self.status_var.get():
             self.status_var.set(self.tr("status_ready"))
         self._refresh_list()
@@ -514,11 +563,12 @@ class ClipPocketApp:
         self._refresh_list()
 
     def restore_selected_to_clipboard(self, _event: tk.Event | None = None) -> None:
-        selected = self.listbox.curselection()
-        if not selected:
+        selected_indices = self._selected_history_indices()
+        if not selected_indices:
             return
 
-        item = self.history.items[selected[0]]
+        history_index = selected_indices[0]
+        item = self.history.items[history_index]
 
         self._suppress_next_clipboard_update(item.text)
         try:
@@ -530,7 +580,7 @@ class ClipPocketApp:
             self.status_var.set(self.tr("status_restore_failed"))
             return
 
-        new_index = self.history.touch(selected[0], time.time())
+        new_index = self.history.touch(history_index, time.time())
         self._refresh_list(select_index=new_index)
         self.status_var.set(self.tr("status_restored"))
 
@@ -559,13 +609,20 @@ class ClipPocketApp:
             self.suppress_clear_after_id = None
 
     def delete_selected_items(self, _event: tk.Event | None = None) -> None:
-        selected = list(self.listbox.curselection())
-        if not selected:
+        selected_indices = self._selected_history_indices()
+        if not selected_indices:
             return
 
-        self.history.delete_indices(selected)
+        self.history.delete_indices(selected_indices)
         self._refresh_list()
         self.status_var.set(self.tr("status_deleted"))
+
+    def _selected_history_indices(self) -> list[int]:
+        indices: list[int] = []
+        for visible_index in self.listbox.curselection():
+            if 0 <= visible_index < len(self.visible_history_indices):
+                indices.append(self.visible_history_indices[visible_index])
+        return indices
 
     def _toggle_keep_open(self) -> None:
         if self.keep_open_var.get():
@@ -1014,8 +1071,13 @@ class ClipPocketApp:
         self.style.configure("TButton", font=default_font)
         self.style.configure("TCheckbutton", font=default_font)
         self.style.configure("TCombobox", font=default_font)
+        self.style.configure("TEntry", font=default_font)
         self.listbox.configure(font=default_font)
         self.item_menu.configure(font=default_font)
+        for key in ("search_entry", "sort_combo"):
+            widget = self.main_widgets.get(key)
+            if isinstance(widget, (ttk.Entry, ttk.Combobox)):
+                widget.configure(font=default_font)
 
         if self.settings_window is not None and self.settings_window.winfo_exists():
             title = self.settings_widgets.get("title")
@@ -1088,6 +1150,13 @@ class ClipPocketApp:
             fieldbackground=[("readonly", palette["surface"])],
             selectbackground=[("readonly", palette["surface"])],
             selectforeground=[("readonly", palette["foreground"])],
+        )
+        self.style.configure(
+            "TEntry",
+            fieldbackground=palette["surface"],
+            foreground=palette["foreground"],
+            bordercolor=palette["border"],
+            insertcolor=palette["foreground"],
         )
         self.style.configure(
             "Horizontal.TScale",
@@ -1202,14 +1271,79 @@ class ClipPocketApp:
 
     def _refresh_list(self, select_index: int | None = None) -> None:
         self.listbox.delete(0, tk.END)
-        for index, item in enumerate(self.history.items, start=1):
+        self.visible_history_indices = self._history_indices_for_view(
+            self.history.items,
+            self.search_var.get(),
+            self.sort_key,
+        )
+        for index, history_index in enumerate(self.visible_history_indices, start=1):
+            item = self.history.items[history_index]
             self.listbox.insert(tk.END, f"[{index}] {self._format_item(item)}")
 
-        if select_index is not None and self.history.items:
-            self.listbox.selection_set(select_index)
-            self.listbox.activate(select_index)
+        if select_index is not None:
+            try:
+                visible_index = self.visible_history_indices.index(select_index)
+            except ValueError:
+                visible_index = None
+            if visible_index is not None:
+                self.listbox.selection_set(visible_index)
+                self.listbox.activate(visible_index)
 
-        self.count_label.configure(text=self.tr("count", count=len(self.history.items)))
+        self._update_count_label()
+
+    def _update_count_label(self) -> None:
+        count = len(self.history.items)
+        shown = len(self.visible_history_indices)
+        if self._normalized_search_query(self.search_var.get()):
+            self.count_label.configure(text=self.tr("count_filtered", shown=shown, count=count))
+            return
+        self.count_label.configure(text=self.tr("count", count=count))
+
+    def _handle_list_filter_changed(self, *_args: object) -> None:
+        self._refresh_list()
+
+    def _handle_sort_changed(self, _event: tk.Event | None = None) -> None:
+        self.sort_key = sort_key_from_label(self.language, self.sort_var.get())
+        self.sort_var.set(sort_label(self.language, self.sort_key))
+        self._refresh_list()
+
+    def _clear_search(self) -> None:
+        if self.search_var.get():
+            self.search_var.set("")
+            return
+        self._refresh_list()
+
+    @classmethod
+    def _history_indices_for_view(
+        cls,
+        items: list[ClipboardItem],
+        search_query: str,
+        sort_key: str,
+    ) -> list[int]:
+        query = cls._normalized_search_query(search_query)
+        indexed_items = [
+            (index, item)
+            for index, item in enumerate(items)
+            if not query or query in cls._normalized_search_query(item.text)
+        ]
+
+        if sort_key == "updated_asc":
+            indexed_items.sort(key=lambda pair: (pair[1].updated_at, pair[0]))
+        elif sort_key == "text_asc":
+            indexed_items.sort(key=lambda pair: (pair[1].text.casefold(), pair[0]))
+        elif sort_key == "text_desc":
+            indexed_items.sort(
+                key=lambda pair: (pair[1].text.casefold(), pair[0]),
+                reverse=True,
+            )
+        else:
+            indexed_items.sort(key=lambda pair: (-pair[1].updated_at, pair[0]))
+
+        return [index for index, _item in indexed_items]
+
+    @staticmethod
+    def _normalized_search_query(search_query: str) -> str:
+        return " ".join(search_query.split()).casefold()
 
     def _format_item(self, item: ClipboardItem) -> str:
         remaining_minutes = self.history.remaining_minutes(item, time.time())
@@ -1228,7 +1362,7 @@ class ClipPocketApp:
 
     def _show_item_context_menu(self, event: tk.Event) -> None:
         clicked_index = self.listbox.nearest(event.y)
-        if clicked_index >= 0:
+        if 0 <= clicked_index < self.listbox.size():
             self.listbox.selection_clear(0, tk.END)
             self.listbox.selection_set(clicked_index)
             self.listbox.activate(clicked_index)

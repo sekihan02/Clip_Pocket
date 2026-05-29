@@ -13,8 +13,12 @@ TEXT = {
         "app_settings": "Clip Pocket Settings",
         "restore": "Restore to clipboard",
         "delete": "Delete",
+        "search": "Search",
+        "clear_search": "Clear",
+        "sort": "Sort",
         "keep_open": "Keep window open",
         "count": "{count} items",
+        "count_filtered": "{shown} of {count} items",
         "status_ready": "Resident. Press Ctrl twice or use the notification-area icon to open.",
         "status_duplicate": "Updated the existing item.",
         "status_added": "Copied text added.",
@@ -68,8 +72,12 @@ TEXT = {
         "app_settings": "Clip Pocket 設定",
         "restore": "クリップボードに戻す",
         "delete": "削除",
+        "search": "検索",
+        "clear_search": "クリア",
+        "sort": "並び替え",
         "keep_open": "ウィンドウを固定",
         "count": "{count}件",
+        "count_filtered": "{shown}/{count}件",
         "status_ready": "常駐中です。Ctrl二回、または通知領域アイコンから開けます。",
         "status_duplicate": "同じ内容の保存期限を更新しました",
         "status_added": "コピー内容を追加しました",
@@ -133,6 +141,13 @@ RETENTION_OPTIONS = [
 COLOR_THEME_OPTIONS = [
     ("light", {"en": "White", "ja": "白"}),
     ("dark", {"en": "Black", "ja": "黒"}),
+]
+
+SORT_OPTIONS = [
+    ("updated_desc", {"en": "Newest first", "ja": "新しい順"}),
+    ("updated_asc", {"en": "Oldest first", "ja": "古い順"}),
+    ("text_asc", {"en": "Text A-Z", "ja": "文字 A-Z"}),
+    ("text_desc", {"en": "Text Z-A", "ja": "文字 Z-A"}),
 ]
 
 
@@ -200,3 +215,24 @@ def color_theme_key_from_label(language: str, label: str) -> str:
         if labels[normalized] == label:
             return key
     return "light"
+
+
+def sort_label(language: str, key: str) -> str:
+    normalized = normalize_language(language)
+    for option_key, labels in SORT_OPTIONS:
+        if option_key == key:
+            return labels[normalized]
+    return SORT_OPTIONS[0][1][normalized]
+
+
+def sort_labels(language: str) -> list[str]:
+    normalized = normalize_language(language)
+    return [labels[normalized] for _key, labels in SORT_OPTIONS]
+
+
+def sort_key_from_label(language: str, label: str) -> str:
+    normalized = normalize_language(language)
+    for key, labels in SORT_OPTIONS:
+        if labels[normalized] == label:
+            return key
+    return "updated_desc"

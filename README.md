@@ -13,7 +13,7 @@ Clip Pocket is a resident Windows app for keeping copied text temporarily and ch
 
 ---
 
-Clip Pocket watches text copied to the Windows clipboard and keeps a short in-memory list. When you want to paste something you copied earlier, open Clip Pocket, double-click that item to make it the current clipboard text, then paste with `Ctrl+V`.
+Clip Pocket watches text copied to the Windows clipboard and keeps a short in-memory list. When you want to paste something you copied earlier, open Clip Pocket, search or sort the list if needed, double-click the item you want to paste next, then paste with `Ctrl+V`.
 
 ## Screenshot
 
@@ -43,6 +43,7 @@ The experimental right-click triple-click gesture is disabled by default. Enable
 - One-character text is recorded; empty text is ignored
 - In-memory history, cleared when the app exits
 - Restore a selected item to the current clipboard
+- Search and sort copied items
 - Manual paste only; Clip Pocket does not inject keystrokes or paste automatically
 - Duplicate copies are refreshed instead of added again
 - Delete unwanted items with `Delete`, the delete button, or the item context menu

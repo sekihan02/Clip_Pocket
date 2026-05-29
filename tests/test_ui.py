@@ -1,6 +1,7 @@
 import unittest
 
 from clip_pocket.constants import MAX_PREVIEW_LENGTH
+from clip_pocket.history import ClipboardItem, fingerprint
 from clip_pocket.settings import AppSettings
 
 try:
@@ -14,6 +15,14 @@ except ModuleNotFoundError as error:
 
 @unittest.skipIf(ClipPocketApp is None, "tkinter is not available")
 class UiHelpersTest(unittest.TestCase):
+    def make_item(self, text: str, updated_at: float) -> ClipboardItem:
+        return ClipboardItem(
+            text=text,
+            text_hash=fingerprint(text),
+            created_at=updated_at,
+            updated_at=updated_at,
+        )
+
     def test_preview_limits_work_before_joining_lines(self) -> None:
         text = ("line\n" * 1_000) + "tail"
 
@@ -26,6 +35,49 @@ class UiHelpersTest(unittest.TestCase):
         preview = ClipPocketApp._preview("first line\r\n\tsecond   line")
 
         self.assertEqual(preview, "first line second line")
+
+    def test_history_view_filters_case_insensitively(self) -> None:
+        items = [
+            self.make_item("Banana", 1),
+            self.make_item("Apple", 3),
+            self.make_item("apricot", 2),
+        ]
+
+        indices = ClipPocketApp._history_indices_for_view(items, "AP", "updated_desc")
+
+        self.assertEqual(indices, [1, 2])
+
+    def test_history_view_filters_across_line_breaks(self) -> None:
+        items = [
+            self.make_item("first line\nsecond line", 1),
+            self.make_item("other text", 2),
+        ]
+
+        indices = ClipPocketApp._history_indices_for_view(items, "line second", "updated_desc")
+
+        self.assertEqual(indices, [0])
+
+    def test_history_view_sorts_by_text(self) -> None:
+        items = [
+            self.make_item("Banana", 1),
+            self.make_item("Apple", 3),
+            self.make_item("apricot", 2),
+        ]
+
+        indices = ClipPocketApp._history_indices_for_view(items, "", "text_asc")
+
+        self.assertEqual(indices, [1, 2, 0])
+
+    def test_history_view_sorts_by_oldest_first(self) -> None:
+        items = [
+            self.make_item("first", 20),
+            self.make_item("second", 10),
+            self.make_item("third", 30),
+        ]
+
+        indices = ClipPocketApp._history_indices_for_view(items, "", "updated_asc")
+
+        self.assertEqual(indices, [1, 0, 2])
 
     def test_window_origin_is_clamped_inside_screen_bounds(self) -> None:
         left, top = ClipPocketApp._clamp_window_origin(

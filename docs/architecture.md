@@ -47,7 +47,7 @@ Clip Pocket is split into small modules so the app can be reviewed and tested be
 - History is in memory only.
 - No SQLite or persistent storage.
 - No automatic paste into other applications.
-- No classification, search, item pinning, memo, or sync behavior.
+- No classification, item pinning, memo, or sync behavior.
 
 ## Release checklist
 
