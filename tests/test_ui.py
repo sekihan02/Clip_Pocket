@@ -22,6 +22,11 @@ class UiHelpersTest(unittest.TestCase):
         self.assertLessEqual(len(preview), MAX_PREVIEW_LENGTH)
         self.assertTrue(preview.endswith("..."))
 
+    def test_preview_collapses_whitespace_to_one_line(self) -> None:
+        preview = ClipPocketApp._preview("first line\r\n\tsecond   line")
+
+        self.assertEqual(preview, "first line second line")
+
     def test_window_origin_is_clamped_inside_screen_bounds(self) -> None:
         left, top = ClipPocketApp._clamp_window_origin(
             1900,

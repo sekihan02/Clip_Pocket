@@ -1221,7 +1221,7 @@ class ClipPocketApp:
     @staticmethod
     def _preview(text: str) -> str:
         source = text[: MAX_PREVIEW_LENGTH * 4]
-        single_line = " ".join(source.splitlines())
+        single_line = " ".join(source.split())
         if len(single_line) <= MAX_PREVIEW_LENGTH:
             return single_line
         return f"{single_line[: MAX_PREVIEW_LENGTH - 3]}..."
