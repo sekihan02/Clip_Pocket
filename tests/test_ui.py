@@ -57,6 +57,50 @@ class UiHelpersTest(unittest.TestCase):
 
         self.assertIsNone(point)
 
+    def test_win32_point_inside_tk_bounds_is_not_remapped(self) -> None:
+        class FakeRoot:
+            def winfo_vrootx(self) -> int:
+                return 0
+
+            def winfo_vrooty(self) -> int:
+                return 0
+
+            def winfo_vrootwidth(self) -> int:
+                return 3840
+
+            def winfo_vrootheight(self) -> int:
+                return 2160
+
+        app = object.__new__(ClipPocketApp)
+        app.root = FakeRoot()
+        app._win32_virtual_screen_bounds = lambda: (0, 0, 3840, 2160)
+
+        point = ClipPocketApp._convert_win32_point_to_tk_coordinates(app, 3000, 1500)
+
+        self.assertEqual(point, (3000, 1500))
+
+    def test_win32_point_outside_tk_bounds_falls_back_to_mapping(self) -> None:
+        class FakeRoot:
+            def winfo_vrootx(self) -> int:
+                return 0
+
+            def winfo_vrooty(self) -> int:
+                return 0
+
+            def winfo_vrootwidth(self) -> int:
+                return 2560
+
+            def winfo_vrootheight(self) -> int:
+                return 1440
+
+        app = object.__new__(ClipPocketApp)
+        app.root = FakeRoot()
+        app._win32_virtual_screen_bounds = lambda: (0, 0, 3840, 2160)
+
+        point = ClipPocketApp._convert_win32_point_to_tk_coordinates(app, 3000, 1500)
+
+        self.assertEqual(point, (2000, 1000))
+
     def test_point_moved_uses_tolerance(self) -> None:
         self.assertFalse(ClipPocketApp._point_moved((100, 100), (102, 103), 3))
         self.assertTrue(ClipPocketApp._point_moved((100, 100), (104, 103), 3))

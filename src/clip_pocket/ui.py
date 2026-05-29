@@ -1348,21 +1348,20 @@ class ClipPocketApp:
         return self.root.winfo_pointerx(), self.root.winfo_pointery()
 
     def _convert_win32_point_to_tk_coordinates(self, x: int, y: int) -> tuple[int, int] | None:
+        tk_bounds = (
+            self.root.winfo_vrootx(),
+            self.root.winfo_vrooty(),
+            self.root.winfo_vrootwidth(),
+            self.root.winfo_vrootheight(),
+        )
+        if self._bounds_contain_point(x, y, tk_bounds):
+            return (x, y)
+
         win32_bounds = self._win32_virtual_screen_bounds()
         if win32_bounds is None:
             return None
 
-        return self._map_point_between_bounds(
-            x,
-            y,
-            win32_bounds,
-            (
-                self.root.winfo_vrootx(),
-                self.root.winfo_vrooty(),
-                self.root.winfo_vrootwidth(),
-                self.root.winfo_vrootheight(),
-            ),
-        )
+        return self._map_point_between_bounds(x, y, win32_bounds, tk_bounds)
 
     @staticmethod
     def _win32_virtual_screen_bounds() -> tuple[int, int, int, int] | None:
@@ -1396,6 +1395,17 @@ class ClipPocketApp:
         mapped_x = target_x + round((x - source_x) * (target_width / source_width))
         mapped_y = target_y + round((y - source_y) * (target_height / source_height))
         return (mapped_x, mapped_y)
+
+    @staticmethod
+    def _bounds_contain_point(
+        x: int,
+        y: int,
+        bounds: tuple[int, int, int, int],
+    ) -> bool:
+        left, top, width, height = bounds
+        if width <= 0 or height <= 0:
+            return False
+        return left <= x < left + width and top <= y < top + height
 
     @staticmethod
     def _clamp_window_origin(
