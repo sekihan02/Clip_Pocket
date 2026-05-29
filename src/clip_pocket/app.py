@@ -9,41 +9,61 @@ from clip_pocket.diagnostics import configure_logging, show_startup_error
 from clip_pocket.startup import disable_startup, enable_startup, is_startup_enabled
 
 
+def build_arg_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(description=APP_NAME)
+    launch_group = parser.add_mutually_exclusive_group()
+    launch_group.add_argument(
+        "--show",
+        action="store_true",
+        help="show the window immediately after startup",
+    )
+    launch_group.add_argument(
+        "--hidden",
+        action="store_true",
+        help="start resident in the notification area without showing the window",
+    )
+
+    startup_group = parser.add_mutually_exclusive_group()
+    startup_group.add_argument(
+        "--install-startup",
+        action="store_true",
+        help="start Clip Pocket automatically when the current user logs in",
+    )
+    startup_group.add_argument(
+        "--uninstall-startup",
+        action="store_true",
+        help="remove Clip Pocket from the current user's login startup",
+    )
+    startup_group.add_argument(
+        "--startup-status",
+        action="store_true",
+        help="print whether login startup is enabled",
+    )
+    return parser
+
+
+def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
+    parser = build_arg_parser()
+    args = parser.parse_args(argv)
+    if _has_startup_action(args) and (args.show or args.hidden):
+        parser.error("startup actions cannot be combined with --show or --hidden")
+    return args
+
+
+def _has_startup_action(args: argparse.Namespace) -> bool:
+    return bool(args.install_startup or args.uninstall_startup or args.startup_status)
+
+
 def main(argv: list[str] | None = None) -> None:
+    args = parse_args(argv)
+
     if sys.platform != "win32":
         raise SystemExit(f"{APP_NAME} is a Windows-only resident desktop app.")
 
     from clip_pocket.ui import ClipPocketApp
     from clip_pocket.win32_host import SingleInstance
 
-    parser = argparse.ArgumentParser(description=APP_NAME)
-    parser.add_argument(
-        "--show",
-        action="store_true",
-        help="show the window immediately after startup",
-    )
-    parser.add_argument(
-        "--hidden",
-        action="store_true",
-        help="start resident in the notification area without showing the window",
-    )
-    parser.add_argument(
-        "--install-startup",
-        action="store_true",
-        help="start Clip Pocket automatically when the current user logs in",
-    )
-    parser.add_argument(
-        "--uninstall-startup",
-        action="store_true",
-        help="remove Clip Pocket from the current user's login startup",
-    )
-    parser.add_argument(
-        "--startup-status",
-        action="store_true",
-        help="print whether login startup is enabled",
-    )
-    args = parser.parse_args(argv)
-    show_on_start = args.show and not args.hidden
+    show_on_start = args.show
 
     if args.install_startup:
         enable_startup()
