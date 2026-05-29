@@ -9,8 +9,6 @@
 
 Clip Pocket is a resident Windows app for keeping copied text temporarily and choosing it again when you want to paste it later.
 
-Current source version: v0.3.0
-
 [日本語 README](docs/README.ja.md)
 
 ---
@@ -21,7 +19,7 @@ Clip Pocket watches text copied to the Windows clipboard and keeps a short in-me
 
 ![Clip Pocket main window](docs/assets/clip-pocket-main.png)
 
-The screenshot shows the default white color setting. Color, opacity, and window size can be changed from `Settings`.
+The screenshot shows the default white color setting. Color, opacity, font size, and window size can be changed from `Settings`.
 
 ## Getting Started
 
